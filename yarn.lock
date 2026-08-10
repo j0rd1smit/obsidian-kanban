@@ -3185,7 +3185,7 @@ obsidian@^1.5.7-1:
 
 obsidian@obsidianmd/obsidian-api#master:
   version "1.5.7"
-  resolved "https://codeload.github.com/obsidianmd/obsidian-api/tar.gz/8b2eda0f24285636c8aa116972643e5233a23dc1"
+  resolved "git+https://github.com/obsidianmd/obsidian-api.git#8b2eda0f24285636c8aa116972643e5233a23dc1"
   dependencies:
     "@types/codemirror" "5.60.8"
     moment "2.29.4"
