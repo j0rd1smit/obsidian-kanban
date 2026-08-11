@@ -17,15 +17,24 @@ export class FakeKanbanView {
   data = '';
   viewSettings: Record<string, any> = {};
   saved: string[] = [];
+  /** Assigned by `loadBoard`; `getViewState` falls back to it, as the real view does. */
+  stateManager?: StateManager;
 
   constructor(file: TFile) {
     this.file = file;
   }
 
   async prerender() {}
-  populateViewState() {}
   initHeaderButtons() {}
   validatePreviewCache() {}
+
+  // Mirrors KanbanView.populateViewState. Several board modifiers splice
+  // `list-collapse` without a fallback, so a view that never seeded it would
+  // fail here in a way it never does in the app.
+  populateViewState(settings: KanbanSettings = {}) {
+    this.viewSettings['kanban-plugin'] ??= settings['kanban-plugin'] || 'board';
+    this.viewSettings['list-collapse'] ??= settings['list-collapse'] || [];
+  }
 
   requestSaveToDisk(data: string) {
     this.data = data;
@@ -37,7 +46,7 @@ export class FakeKanbanView {
   }
 
   getViewState(key: string) {
-    return this.viewSettings[key];
+    return this.viewSettings[key] ?? this.stateManager?.getSetting(key as keyof KanbanSettings);
   }
 
   setViewState(key: string, val: any, op?: (val: any) => any) {
@@ -70,6 +79,8 @@ export async function loadBoard(md: string, globalSettings: KanbanSettings = {})
     () => {},
     () => globalSettings
   );
+
+  view.stateManager = stateManager;
 
   // registerView() is async and the constructor doesn't await it
   await new Promise((res) => setTimeout(res, 25));

@@ -35,6 +35,7 @@ Same-board move, in one `stateManager.setState`:
   Do not hand-roll remove/insert, and do not skip `maybeCompleteForMove`, or cards moved into a Complete lane will not be checked off.
 - A synthetic move gets its `dropPath` from board data, not from the DOM, so build it as `[laneIndex, insertIndex]` directly.
 - Everything goes through `stateManager.setState`, which saves to disk for you.
+- `tests/helpers/drop.ts` already composes those pieces, for the smoke tests. Read it as a worked example — see [testing.md](testing.md).
 
 The auto-move-on-complete feature deliberately does **not** reuse `moveEntity`; see [card-completion.md](card-completion.md) for why.
 
