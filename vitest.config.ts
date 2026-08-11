@@ -30,5 +30,8 @@ export default defineConfig({
     },
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
+    // A test that stubs a global — console.error, say — gets the real one back
+    // afterwards even if an assertion threw before it could restore anything.
+    restoreMocks: true,
   },
 });

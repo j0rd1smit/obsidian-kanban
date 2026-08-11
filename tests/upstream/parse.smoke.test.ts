@@ -8,7 +8,7 @@
  */
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { KITCHEN_SINK, itemByTitle, laneTitles, wrapBoard } from '../helpers/boards';
 import { boardShape } from '../helpers/fixtures';
@@ -225,7 +225,15 @@ describe('parsing frontmatter and the settings footer', () => {
 });
 
 describe('parsing failures', () => {
+  // StateManager.getParsedBoard logs the failure as well as recording it, which
+  // is how it reaches Obsidian's developer console. Stubbing the logger here
+  // keeps a passing run quiet — an unexpected console.error is worth noticing —
+  // and lets the tests assert that reporting rather than just tolerate it.
+  // `restoreMocks` puts the real console.error back after each test.
+  const silenceConsoleError = () => vi.spyOn(console, 'error').mockImplementation(() => {});
+
   it('records an error rather than throwing when the settings block is not JSON', async () => {
+    const logged = silenceConsoleError();
     const md = wrapBoard(['## Todo', '', '- [ ] One']).replace(
       '{"kanban-plugin":"board"}',
       '{not json'
@@ -233,14 +241,17 @@ describe('parsing failures', () => {
     const harness = await loadBoard(md);
 
     expect(harness.errors().join()).toMatch(/SyntaxError/);
+    expect(logged).toHaveBeenCalled();
     // and, crucially, nothing is written back over the user's file
     expect(harness.markdown()).toBe('');
   });
 
   it('records an error when the file has no frontmatter at all', async () => {
+    const logged = silenceConsoleError();
     const harness = await loadBoard('## Todo\n\n- [ ] One\n');
 
     expect(harness.errors().join()).toMatch(/frontmatter/);
+    expect(logged).toHaveBeenCalled();
     expect(harness.markdown()).toBe('');
   });
 

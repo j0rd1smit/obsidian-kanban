@@ -61,3 +61,7 @@ Not covered, because it needs a rendered component: search filtering (`useSearch
 - `FakeKanbanView.populateViewState` seeds `list-collapse` to `[]` the way `KanbanView` does.
   `insertLane`, `archiveLane`, `deleteEntity` and `duplicateEntity` splice that array with no fallback, so a view that never seeded it throws in a test where the app is fine.
 - A board with a parse error never reaches disk (`saveToDisk` bails on `state.data.errors`), so `harness.markdown()` is `''` for those tests, not the input.
+- `StateManager.getParsedBoard` **logs** a parse failure as well as recording it (`src/StateManager.ts:325`), so a test that feeds the parser broken input prints a stack trace vitest forwards to stderr.
+  The two in `parse.smoke.test.ts` stub `console.error` with `vi.spyOn` and assert it was called, which keeps a green run quiet and pins the reporting at the same time.
+  Do that per test, never globally in `setup.ts` — a blanket stub would also swallow the unexpected `console.error` that a passing run should let you see.
+  `restoreMocks: true` in `vitest.config.ts` puts the real one back afterwards, including when an assertion throws first.
