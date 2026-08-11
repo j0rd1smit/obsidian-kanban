@@ -1,6 +1,26 @@
 name: Release Obsidian plugin
 
+# Two ways in, one publish path.
+#
+#   * Actions -> Release Obsidian plugin -> "Run workflow": picks the new
+#     version, bumps it, tags it, publishes it. This is the button.
+#   * A tag pushed by hand (`yarn bump && yarn release` locally): publishes
+#     that tag, which is what this workflow did before the button existed.
+#
+# The button cannot trigger the tag path: the tag it pushes is pushed with
+# GITHUB_TOKEN, and GitHub deliberately does not start workflow runs from
+# those, so there is no way to publish the same version twice.
 on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to bump
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
   push:
     tags:
       - '*'
@@ -8,12 +28,34 @@ on:
 permissions:
   contents: write
 
+# Two releases in flight would race on the tag and on the push to `custom`.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  build:
+  release:
+    name: Release
     runs-on: ubuntu-latest
 
     steps:
+      # "Run workflow" lets the caller pick any branch, and `custom` is the
+      # only one that carries this fork's tooling — or its version numbers.
+      # Fail before the checkout rather than after a five minute build.
+      - name: Refuse to release anything but custom
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/custom'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          echo "::error::Releases run from custom, not $REF."
+          exit 1
+
       - uses: actions/checkout@v4
+        with:
+          # `yarn bump` writes release-notes.md from `git log <last tag>..HEAD`,
+          # so it needs the tags and the history behind them, not a shallow
+          # clone of one commit.
+          fetch-depth: 0
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -23,18 +65,48 @@ jobs:
 
       # yarn.lock is the only lockfile in the repo, so `npm install` would
       # resolve its own dependency set and release a build CI never checked.
-      - name: Build plugin
-        run: |
-          yarn install --frozen-lockfile
-          yarn build
+      - name: Install
+        run: yarn install --frozen-lockfile
 
+      # The same two commands the manual release used: `yarn version` moves
+      # package.json, `yarn bump` copies that version into manifest.json and
+      # versions.json, regenerates release-notes.md, and stages all four.
+      # Nothing is pushed until the checks below pass.
+      - name: Bump the version
+        id: bump
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          yarn version --no-git-tag-version "--$BUMP"
+          yarn bump
+          echo "tag=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+
+      # Every check ci.yml runs, plus the build, against the bumped tree. A
+      # release is the one build nobody can quietly re-cut, so it is not taken
+      # on trust from whatever CI said about an earlier commit.
+      - name: Check and build
+        run: yarn ci
+
+      - name: Commit and tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "$TAG"
+          git tag "$TAG"
+          git push origin HEAD:custom "refs/tags/$TAG"
+
+      # steps.bump.outputs.tag is empty on the tag-push path, where the tag to
+      # release is the ref that started the run.
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.bump.outputs.tag || github.ref_name }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
-
-          gh release create "$tag" \
-            --title="$tag" \
+          gh release create "$TAG" \
+            --title="$TAG" \
             --notes-file="release-notes.md" \
             main.js manifest.json styles.css

@@ -9,10 +9,8 @@ What GitHub Actions runs, and the local equivalent (`yarn ci`).
   **Not on `main`**: `main` mirrors upstream and has no `tests/`, no
   `vitest.config.ts` and no fork tooling, so a run there fails for reasons that
   may not be fixed on that branch.
-- `.github/workflows/release.yml` — upstream's release job, on tag push. Builds
-  with `yarn install --frozen-lockfile` (not `npm install`) so a release is the
-  same dependency set CI checked, and takes its node version from `.nvmrc` like
-  CI does.
+- `.github/workflows/release.yml` — the release. Runs on manual dispatch (the
+  button) and on a tag push. See [the release section](#the-release) below.
 
 ## The gate
 
@@ -48,6 +46,38 @@ which the lockfile makes reproducible, or a tagged release through
 
 `yarn ci` chains the same commands locally, in the same order, and takes about
 25s on a warm `node_modules`.
+
+## The release
+
+Actions -> **Release Obsidian plugin** -> **Run workflow**, on the `custom`
+branch, pick `patch` / `minor` / `major`. One job does the whole release:
+
+| Step | What it does |
+| --- | --- |
+| Refuse to release anything but custom | dispatch from any other branch fails before the checkout |
+| Checkout | `fetch-depth: 0`, because the release notes are a `git log` since the last tag |
+| Install | `yarn install --frozen-lockfile`, the dependency set CI checked |
+| Bump the version | `yarn version --no-git-tag-version --<bump>` then `yarn bump` |
+| Check and build | `yarn ci` — the whole gate again, now against the bumped tree |
+| Commit and tag | commit the four bumped files, tag `<version>`, push both to `custom` |
+| Create release | `gh release create` with `main.js`, `manifest.json`, `styles.css` |
+
+The version bump runs the same two commands a manual release ran, so the
+artifacts are identical either way: `yarn version` moves `package.json`,
+`yarn bump` copies that into `manifest.json` and `versions.json` (via
+`version-bump.mjs`), regenerates `release-notes.md` from `git log <last
+tag>..HEAD --oneline`, and stages all four. Nothing is pushed until `yarn ci`
+has passed, so a failed release leaves no tag, no commit and no version behind.
+
+The tag-push trigger is still there, so a local `yarn bump && yarn release`
+publishes exactly as it did before. It cannot double-fire on the button: the
+workflow pushes its tag with `GITHUB_TOKEN`, and GitHub does not start workflow
+runs from pushes made with that token. The same rule means the release commit
+lands on `custom` without a CI run — which is why the release runs `yarn ci`
+itself rather than trusting an earlier run.
+
+`steps.bump.outputs.tag` is empty on the tag-push path, so the publish step
+falls back to `github.ref_name` — the tag that started the run.
 
 ## The three TS programs
 
@@ -108,6 +138,15 @@ lockfile is perfectly in sync, it just points at something unreachable.
 - `src/lang/helpers.ts:22` imports the Ukrainian locale from `./locale/tr`
   (upstream bug), which is why `src/lang/locale/uk.ts` is in no TS program. Left
   alone — fixing it is an upstream change, not a CI one.
+- The release pushes a commit straight to `custom` with `GITHUB_TOKEN`. A branch
+  protection rule on `custom` that requires a pull request would reject that
+  push — after the tag was already created locally in the runner, so the tag
+  never reaches GitHub and the run just fails. Re-running after removing the
+  rule is safe; nothing was published.
+- `workflow_dispatch` only shows a "Run workflow" button for workflows that
+  exist on the repository's **default branch**. Here the default branch is
+  `custom`, which is why the button is visible at all — it would not be if the
+  default were `main`.
 - Prettier checks `src/` and `tests/` only. The root `.mjs` files
   (`buffer-es6.mjs`, `version-bump.mjs`) are upstream's and are not
   prettier-clean; reformatting them would create merge conflicts for no gain.

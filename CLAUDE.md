@@ -49,4 +49,5 @@ You must keep this index file up to date as you added, update, remove notes.
 
 Before finishing a change run `yarn ci` (or at least `yarn test` and `yarn typecheck`).
 See `.agent_notes/architecture/ci.md` for what CI enforces and why.
-Release commands (`yarn bump`, `yarn release`) are run by the user, not by agents.
+Releases are cut by the user, not by agents: Actions -> "Release Obsidian plugin" -> "Run workflow" on `custom`, choosing patch / minor / major.
+The local commands (`yarn bump`, `yarn release`) still work as a fallback and are also the user's to run.
