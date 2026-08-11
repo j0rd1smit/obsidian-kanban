@@ -29,3 +29,4 @@ changelog/2026-08-10-add-a-ci-workflow-and-make-lint-enforceable.md: ci.yml gate
 changelog/2026-08-11-smoke-tests-for-upstream-behaviour.md: tests/upstream/ — a shallow CI signal that the behaviour inherited from upstream still works, the kitchen-sink fixture, and the synthetic drop helper.
 changelog/2026-08-11-typecheck-tests-in-ci.md: tsconfig.tests.json + yarn typecheck:tests as its own CI step, es2022 lib for tests only, and the TFile-stub and TS7011 fixes it forced.
 changelog/2026-08-11-release-from-a-button-in-the-actions-tab.md: release.yml gains a workflow_dispatch patch/minor/major button that bumps, runs yarn ci, tags and publishes; the tag-push path stays as an escape hatch.
+changelog/2026-08-11-keep-a-passing-test-run-quiet.md: the two parse-failure tests stub console.error and assert it was called, plus restoreMocks in vitest.config.ts, so a green run prints no stack traces.
