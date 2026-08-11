@@ -15,7 +15,7 @@ architecture/drag-and-drop.md: custom DnD in src/dnd, the handleDrop branches, m
 architecture/card-completion.md: checkbox handling in src/helpers/completeItem.ts, Tasks-plugin recurring tasks, and the auto-move-to-done settings.
 architecture/testing.md: vitest setup, obsidian module stubs, the real-StateManager harness, the markdown round-trip guard, and the two test tiers (fork code in depth, upstream behaviour by smoke test in tests/upstream/).
 architecture/demo-vault.md: demo_vault/ as a real Obsidian vault, yarn build:demo / dev:demo, and what is gitignored.
-architecture/ci.md: the GitHub Actions gate and yarn ci — install/lockfile/typecheck/lint/format/test/build, the three tsconfig programs (json / tests / eslint), and the lockfile transport check.
+architecture/ci.md: the GitHub Actions gate and yarn ci — install/lockfile/typecheck/lint/format/test/build, the three tsconfig programs (json / tests / eslint), the lockfile transport check, and the one-button release workflow.
 
 ## Changelog
 
@@ -28,3 +28,4 @@ changelog/2026-08-10-fetch-the-obsidian-api-dep-over-git-instead-of-a-codeload-t
 changelog/2026-08-10-add-a-ci-workflow-and-make-lint-enforceable.md: ci.yml gate on custom, scripts/check-lockfile.mjs, tsconfig.eslint.json so lint passes, .nvmrc, and release.yml building from the lockfile.
 changelog/2026-08-11-smoke-tests-for-upstream-behaviour.md: tests/upstream/ — a shallow CI signal that the behaviour inherited from upstream still works, the kitchen-sink fixture, and the synthetic drop helper.
 changelog/2026-08-11-typecheck-tests-in-ci.md: tsconfig.tests.json + yarn typecheck:tests as its own CI step, es2022 lib for tests only, and the TFile-stub and TS7011 fixes it forced.
+changelog/2026-08-11-release-from-a-button-in-the-actions-tab.md: release.yml gains a workflow_dispatch patch/minor/major button that bumps, runs yarn ci, tags and publishes; the tag-push path stays as an escape hatch.
