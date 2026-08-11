@@ -50,7 +50,7 @@ jobs:
           echo "::error::Releases run from custom, not $REF."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # `yarn bump` writes release-notes.md from `git log <last tag>..HEAD`,
           # so it needs the tags and the history behind them, not a shallow
@@ -58,7 +58,7 @@ jobs:
           fetch-depth: 0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: yarn
