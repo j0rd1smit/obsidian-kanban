@@ -21,7 +21,7 @@
 
 | Where | Covers | Depth |
 | --- | --- | --- |
-| `tests/*.test.ts` | this fork's own code (`src/helpers/completeItem.ts` so far) | unit + integration, edge cases included |
+| `tests/*.test.ts` | this fork's own code (`src/helpers/completeItem.ts`, `boardMarkdown.ts`, `moveCardToBoard.ts`) | unit + integration, edge cases included |
 | `tests/upstream/*.smoke.test.ts` | upstream behavior this fork inherits | smoke only — one assertion per user-visible behavior |
 
 The `tests/upstream/` tier exists for merging upstream: it is a CI signal that
@@ -38,6 +38,12 @@ Files, and the behavior each pins:
 - `settings.smoke.test.ts` — global / board / frontmatter resolution order and the compiled defaults.
 - `stateManager.smoke.test.ts` — the diff/patch reparse that preserves ids, and the write path (including that an errored board is never saved).
 - `cardDates.smoke.test.ts` — what the card menu's date and time pickers write into a card.
+
+The fork's own tier, and what each file pins:
+
+- `completeItem.test.ts` / `completeItem.smoke.test.ts` — the checkbox handler and the auto-move-to-done setting.
+- `boardMarkdown.test.ts` — reading a board file's lists and splicing a card line into one, checked against the real parser at the end.
+- `moveCardToBoard.test.ts` — moving a card to another board, both write paths. `fakeVault` in that file backs `app.vault` with an in-memory map for the closed-board path. See [cross-board-card-moves.md](cross-board-card-moves.md).
 
 Supporting files:
 

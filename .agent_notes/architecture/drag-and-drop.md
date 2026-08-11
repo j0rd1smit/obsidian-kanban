@@ -36,6 +36,7 @@ Same-board move, in one `stateManager.setState`:
 - A synthetic move gets its `dropPath` from board data, not from the DOM, so build it as `[laneIndex, insertIndex]` directly.
 - Everything goes through `stateManager.setState`, which saves to disk for you.
 - `tests/helpers/drop.ts` already composes those pieces, for the smoke tests. Read it as a worked example — see [testing.md](testing.md).
+- The card menu's "Move to other board" is a synthetic cross-board move, including for a destination board that is not open. See [cross-board-card-moves.md](cross-board-card-moves.md).
 
 The auto-move-on-complete feature deliberately does **not** reuse `moveEntity`; see [card-completion.md](card-completion.md) for why.
 

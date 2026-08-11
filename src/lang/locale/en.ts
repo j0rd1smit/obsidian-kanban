@@ -242,6 +242,13 @@ const en = {
   'Move to top': 'Move to top',
   'Move to bottom': 'Move to bottom',
   'Move to list': 'Move to list',
+  'Move to other board': 'Move to other board',
+  'Move card to board...': 'Move card to board...',
+  'Move card to list...': 'Move card to list...',
+  'No other boards in this vault': 'No other boards in this vault',
+  'That board has no lists': 'That board has no lists',
+  'Card moved to': 'Card moved to',
+  'Could not move the card': 'Could not move the card',
 
   // components/Lane/LaneForm.tsx
   'Enter list title...': 'Enter list title...',
