@@ -17,6 +17,36 @@
 - Two tests load the demo vault's board from disk, so an example that stops working fails the suite.
   See [demo-vault.md](demo-vault.md).
 
+## Two tiers
+
+| Where | Covers | Depth |
+| --- | --- | --- |
+| `tests/*.test.ts` | this fork's own code (`src/helpers/completeItem.ts` so far) | unit + integration, edge cases included |
+| `tests/upstream/*.smoke.test.ts` | upstream behavior this fork inherits | smoke only — one assertion per user-visible behavior |
+
+The `tests/upstream/` tier exists for merging upstream: it is a CI signal that
+says "the original plugin still does what it did", not a spec of the original
+plugin. Keep it that way — a smoke test that fails for a cosmetic upstream
+change costs more than it catches. Add depth in the top-level tier instead.
+
+Files, and the behavior each pins:
+
+- `parse.smoke.test.ts` — markdown -> board: lanes, cards, checkbox chars, WIP limits, `**Complete**`, archive, multi-line cards, block ids, tags/dates/times/links, the frontmatter vs settings split, and the parse failures that must not throw.
+- `serialize.smoke.test.ts` — board -> markdown, plus an exact-string golden test against `tests/fixtures/kitchen-sink.md`.
+- `boardModifiers.smoke.test.ts` — every operation the card and list menus call, down to the markdown written back.
+- `dragAndDrop.smoke.test.ts` — moving cards and lists, and the checkbox flip when a card crosses a complete lane.
+- `settings.smoke.test.ts` — global / board / frontmatter resolution order and the compiled defaults.
+- `stateManager.smoke.test.ts` — the diff/patch reparse that preserves ids, and the write path (including that an errored board is never saved).
+- `cardDates.smoke.test.ts` — what the card menu's date and time pickers write into a card.
+
+Supporting files:
+
+- `tests/fixtures/kitchen-sink.md` is a board using every parser feature at once, in exactly the form `boardToMd` emits, so parse -> serialize is byte-identical to the file. Regenerate it by saving it through the harness, never by hand.
+- `tests/helpers/boards.ts` has `wrapBoard(lines, settings)`, which supplies the frontmatter and settings codeblock so a test only spells out the lanes.
+- `tests/helpers/drop.ts` reproduces `handleDrop`'s same-board branch. `handleDrop` is a closure inside `DragDropApp`, so it cannot be called; this is a copy, and it guards the pieces it composes (`moveEntity`, `maybeCompleteForMove`, the path arithmetic) rather than the wiring in `DragDropApp`. See [drag-and-drop.md](drag-and-drop.md).
+
+Not covered, because it needs a rendered component: search filtering (`useSearchValue`), the table view's columns (`useTableColumns`), and lane sorting (the callbacks live inside `LaneMenu.tsx`).
+
 ## Gotchas
 
 - `src/lang/helpers.ts` reads `window.localStorage` at **import** time, so every test file needs it before any source module loads.
@@ -28,3 +58,6 @@
   The alias means the stub is what runs, and its constructor takes a path where the published typings declare a zero-argument one.
 - `setup.ts` annotates the return type of every stub that returns `null` or `[]`.
   `strictNullChecks` is off, so `null` widens to `any` and `noImplicitAny` rejects the function (TS7011).
+- `FakeKanbanView.populateViewState` seeds `list-collapse` to `[]` the way `KanbanView` does.
+  `insertLane`, `archiveLane`, `deleteEntity` and `duplicateEntity` splice that array with no fallback, so a view that never seeded it throws in a test where the app is fine.
+- A board with a parse error never reaches disk (`saveToDisk` bails on `state.data.errors`), so `harness.markdown()` is `''` for those tests, not the input.

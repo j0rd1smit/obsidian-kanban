@@ -13,7 +13,7 @@ architecture/parsing.md: parseMarkdown and astToUnhydratedBoard, hydration, the 
 architecture/settings.md: global / per-board / per-view layers, getSetting resolution order, compileSettings, shouldRefreshBoard, and how to add a setting.
 architecture/drag-and-drop.md: custom DnD in src/dnd, the handleDrop branches, moveEntity + maybeCompleteForMove, and how to build a synthetic card move.
 architecture/card-completion.md: checkbox handling in src/helpers/completeItem.ts, Tasks-plugin recurring tasks, and the auto-move-to-done settings.
-architecture/testing.md: vitest setup, obsidian module stubs, the real-StateManager harness, and the markdown round-trip guard.
+architecture/testing.md: vitest setup, obsidian module stubs, the real-StateManager harness, the markdown round-trip guard, and the two test tiers (fork code in depth, upstream behaviour by smoke test in tests/upstream/).
 architecture/demo-vault.md: demo_vault/ as a real Obsidian vault, yarn build:demo / dev:demo, and what is gitignored.
 architecture/ci.md: the GitHub Actions gate and yarn ci — install/lockfile/typecheck/lint/format/test/build, the three tsconfig programs (json / tests / eslint), and the lockfile transport check.
 
@@ -26,4 +26,5 @@ changelog/2026-08-10-pin-cm-language-over-https-instead-of-ssh.md: yarn.lock res
 changelog/2026-08-10-get-yarn-test-and-typecheck-passing-again.md: declare the global app, type ViewState.state.file, fix the localStorage guard, and stub obsidian-daily-notes-interface.
 changelog/2026-08-10-fetch-the-obsidian-api-dep-over-git-instead-of-a-codeload-tarball.md: yarn.lock resolves the obsidian dep over git+https instead of a codeload.github.com tarball, which the sandbox egress proxy blocks with a 403.
 changelog/2026-08-10-add-a-ci-workflow-and-make-lint-enforceable.md: ci.yml gate on custom, scripts/check-lockfile.mjs, tsconfig.eslint.json so lint passes, .nvmrc, and release.yml building from the lockfile.
+changelog/2026-08-11-smoke-tests-for-upstream-behaviour.md: tests/upstream/ — a shallow CI signal that the behaviour inherited from upstream still works, the kitchen-sink fixture, and the synthetic drop helper.
 changelog/2026-08-11-typecheck-tests-in-ci.md: tsconfig.tests.json + yarn typecheck:tests as its own CI step, es2022 lib for tests only, and the TFile-stub and TS7011 fixes it forced.
