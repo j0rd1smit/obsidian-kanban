@@ -1,4 +1,5 @@
 import {
+  findOpenStateManager,
   getDestinationLanes,
   listKanbanBoards,
   moveCardToBoard,
@@ -6,7 +7,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { wrapBoard } from './helpers/boards';
-import { Harness, loadBoard } from './helpers/harness';
+import { FakeKanbanView, Harness, loadBoard } from './helpers/harness';
 import { TFile } from './mocks/obsidian';
 
 /**
@@ -141,6 +142,44 @@ describe('moving a card to a board that is open', () => {
       move(source, destination.view.file, lane(7, 'Ghost'), destination)
     ).rejects.toThrow(/no longer has a list/);
     expect(source.board().children[0].children).toHaveLength(2);
+  });
+
+  // A board is open once, however many tabs, panes or windows show it:
+  // `plugin.stateManagers` is keyed by file, and every view of that file shares
+  // the one StateManager. Which tab the destination sits in is not a case.
+  it('resolves the destination by file, whichever view has it open', async () => {
+    await load();
+
+    // The map plugin.addView() maintains: one StateManager per file, shared by
+    // every view of it, whatever tab or window that view lives in
+    (source.view as any).plugin = {
+      stateManagers: new Map([
+        [source.view.file, source.stateManager],
+        [destination.view.file, destination.stateManager],
+      ]),
+    };
+
+    expect(findOpenStateManager(source.stateManager, destination.view.file as any)).toBe(
+      destination.stateManager
+    );
+    expect(
+      findOpenStateManager(source.stateManager, new TFile('Closed.md') as any)
+    ).toBeUndefined();
+  });
+
+  it('updates every view of the destination board, not just the primary one', async () => {
+    await load();
+
+    const secondTab = new FakeKanbanView(destination.view.file);
+    secondTab.stateManager = destination.stateManager;
+    await destination.stateManager.registerView(secondTab as any, DESTINATION, false);
+
+    await move(source, destination.view.file, lane(0, 'Backlog'), destination);
+
+    expect(secondTab.data).toContain('- [ ] Ship it');
+    expect(secondTab.data).toBe(destination.view.data);
+    // Only the primary view writes to disk
+    expect(secondTab.saved).toEqual([]);
   });
 
   it("lists the open board's lists from its live state, not from disk", async () => {

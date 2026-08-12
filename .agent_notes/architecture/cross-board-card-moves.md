@@ -18,6 +18,15 @@ destination board.
 here as `stateManager.getAView()?.plugin` (a type-only import, so the helper does
 not pull `KanbanView` in at runtime and no import cycle forms).
 
+That map is keyed by **file**, not by view (`main.ts:54`, `addView` at `:212`), so
+"open" is a property of the board and not of the tab it is showing in. A board
+open in a second tab, a split pane or a popped-out window is the same
+`StateManager`, and `setState` fans out to all of them: `saveToDisk` assigns
+`view.data` for every view in `viewSet` while only the primary calls
+`requestSave()`, and every mounted component re-renders through `stateReceivers`.
+Moving a card from a board in tab 1 to a board in tab 2 is therefore the ordinary
+open case, with no per-tab handling anywhere in this feature.
+
 - **Destination open**: `destination.setState(board => insertEntity(...))`, the same as the cross-board branch of `handleDrop`, including clearing the destination lane's `sorted`. The state manager saves it.
 - **Destination closed**: `app.vault.process(file, md => ...)` splices `itemToMd(item)` into the right lane and leaves every other byte alone.
 
