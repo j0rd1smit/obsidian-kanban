@@ -6,7 +6,7 @@ import { KanbanView } from './KanbanView';
 import { KanbanSettings, SettingRetrievers } from './Settings';
 import { getDefaultDateFormat, getDefaultTimeFormat } from './components/helpers';
 import { Board, BoardTemplate, Item } from './components/types';
-import { autoMoveDoneOptions, autoMoveExternallyCompletedItems } from './helpers/completeItem';
+import { autoMoveCompletedItems, autoMoveDoneOptions } from './helpers/completeItem';
 import { ListFormat } from './parsers/List';
 import { BaseFormat, frontmatterKey, shouldRefreshBoard } from './parsers/common';
 import { getTaskStatusDone } from './parsers/helpers/inlineMetadata';
@@ -91,15 +91,11 @@ export class StateManager {
     try {
       const parsed = this.getParsedBoard(md);
 
-      // This runs on every reload of the file, which is where a checkbox ticked
-      // outside the board — a Dataview or Tasks query — first becomes visible to
-      // us. Settings are resolved against the board we just parsed, since it may
-      // carry newer ones than the state we are about to replace.
-      const board = autoMoveExternallyCompletedItems(
-        this.state,
-        parsed,
-        autoMoveDoneOptions(this, parsed.data.settings)
-      );
+      // This runs on every load and reload of the file, which is where a
+      // checkbox ticked outside the board — a Dataview or Tasks query — becomes
+      // visible to us. Settings are resolved against the board we just parsed,
+      // since it may carry newer ones than the state we are about to replace.
+      const board = autoMoveCompletedItems(parsed, autoMoveDoneOptions(this, parsed.data.settings));
 
       await view.prerender(board);
       // Only a move needs writing back; a plain reload is already what is on disk

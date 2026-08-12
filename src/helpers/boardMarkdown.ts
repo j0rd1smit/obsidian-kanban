@@ -1,4 +1,5 @@
-import { KanbanSettings } from 'src/Settings';
+import { parseYaml } from 'obsidian';
+import { KanbanSettings, settingKeyLookup } from 'src/Settings';
 import { archiveString, completeString } from 'src/parsers/common';
 import { parseLaneTitle } from 'src/parsers/helpers/parser';
 
@@ -113,6 +114,45 @@ function hasCardBefore(lines: string[], from: number, to: number) {
   return false;
 }
 
+/** One card of a list, as the lines it occupies. */
+export interface MarkdownCard {
+  /** The character between the brackets: `x` for `- [x] ...`. */
+  checkChar: string;
+  startLine: number;
+  /** One past the card's last line. */
+  endLine: number;
+}
+
+// Deliberately stricter than `cardRe`: only a card the serializer would have
+// written this way is one this module is willing to move.
+const cardStartRe = /^[-*+] \[(.)\](?=[ \t]|$)/;
+const continuationRe = /^(?: {4}|\t)/;
+
+/**
+ * The cards of one list, in file order.
+ *
+ * A card runs from its `- [ ]` line to the last indented continuation line under
+ * it, which is how `indentNewLines` writes a card that spans several lines. An
+ * indented `- [x]` is a checklist item inside a card, not a card, and is part of
+ * whichever card it sits under.
+ */
+export function parseCardsInLane(lines: string[], lane: MarkdownLane): MarkdownCard[] {
+  const cards: MarkdownCard[] = [];
+
+  for (let i = lane.headingLine + 1; i < lane.endLine; i++) {
+    const match = cardStartRe.exec(lines[i]);
+    if (!match) continue;
+
+    let end = i + 1;
+    while (end < lane.endLine && continuationRe.test(lines[end])) end++;
+
+    cards.push({ checkChar: match[1], startLine: i, endLine: end });
+    i = end - 1;
+  }
+
+  return cards;
+}
+
 export type InsertionMethod = KanbanSettings['new-card-insertion-method'];
 
 /**
@@ -157,6 +197,44 @@ export function insertItemIntoLane(
   lines.splice(findInsertLine(lines, lane, method), 0, ...itemMd.split('\n'));
 
   return lines.join('\n');
+}
+
+/**
+ * The board's settings the way `parseMarkdown` resolves them: the settings
+ * footer, with any setting key in the file's frontmatter taking precedence.
+ */
+export function parseBoardSettings(md: string): KanbanSettings {
+  return { ...parseSettingsFromMarkdown(md), ...parseSettingsFromFrontmatter(md) };
+}
+
+/**
+ * The setting keys carried by the file's frontmatter. Frontmatter keys that are
+ * not settings belong to the note and are ignored here.
+ */
+export function parseSettingsFromFrontmatter(md: string): KanbanSettings {
+  const lines = md.split('\n');
+  if (lines[0]?.trim() !== '---') return {};
+
+  const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
+  if (end === -1) return {};
+
+  let frontmatter: Record<string, any>;
+
+  try {
+    frontmatter = parseYaml(lines.slice(1, end).join('\n')) || {};
+  } catch (e) {
+    return {};
+  }
+
+  const settings: KanbanSettings = {};
+
+  for (const key of Object.keys(frontmatter)) {
+    if (settingKeyLookup.has(key as keyof KanbanSettings)) {
+      (settings as Record<string, any>)[key] = frontmatter[key];
+    }
+  }
+
+  return settings;
 }
 
 /**

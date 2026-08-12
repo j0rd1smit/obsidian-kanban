@@ -18,6 +18,7 @@ import { StateManager } from './StateManager';
 import { DateSuggest, TimeSuggest } from './components/Editor/suggest';
 import { getParentWindow } from './dnd/util/getWindow';
 import { hasFrontmatterKey } from './helpers';
+import { ClosedBoardSweeper } from './helpers/sweepCompletedCards';
 import { t } from './lang/helpers';
 import { basicFrontmatter, frontmatterKey } from './parsers/common';
 
@@ -55,6 +56,9 @@ export default class KanbanPlugin extends Plugin {
 
   windowRegistry: Map<Window, WindowRegistry> = new Map();
 
+  /** Auto-move for boards that are closed when a card is completed. */
+  sweeper: ClosedBoardSweeper;
+
   _loaded: boolean = false;
 
   isShiftPressed: boolean = false;
@@ -79,6 +83,7 @@ export default class KanbanPlugin extends Plugin {
 
   onunload() {
     this.MarkdownEditor = null;
+    this.sweeper?.destroy();
     this.windowRegistry.forEach((reg, win) => {
       reg.viewStateReceivers.forEach((fn) => fn([]));
       this.unmount(win);
@@ -99,6 +104,16 @@ export default class KanbanPlugin extends Plugin {
     await this.loadSettings();
 
     this.MarkdownEditor = getEditorClass(this.app);
+
+    this.sweeper = new ClosedBoardSweeper({
+      app: this.app,
+      isOpen: (file) => this.stateManagers.has(file),
+      getGlobalSettings: () => this.settings,
+    });
+
+    // Catches what was ticked while Obsidian was not running, synced in from
+    // another device for instance
+    this.app.workspace.onLayoutReady(() => this.sweeper.sweepAll());
 
     this.registerEditorSuggest(new TimeSuggest(this.app, this));
     this.registerEditorSuggest(new DateSuggest(this.app, this));
@@ -542,6 +557,9 @@ export default class KanbanPlugin extends Plugin {
       app.vault.on('modify', (file) => {
         if (file instanceof TFile) {
           notifyFileChange(file);
+          // A board changed behind our back — a checkbox ticked in a dataview or
+          // tasks query, say. An open board reparses and handles it itself.
+          this.sweeper.queue(file);
         }
       })
     );

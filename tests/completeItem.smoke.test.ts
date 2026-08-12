@@ -373,18 +373,36 @@ describe('a checkbox ticked outside the board', () => {
     expect(harness.view.saved).toHaveLength(afterMove);
   });
 
-  it('leaves a card that was already complete outside the done lane alone', async () => {
+  it('moves a card that was already complete when the board was opened', async () => {
+    // the rule is the invariant, not "was ticked a moment ago": a board that was
+    // closed when the tick happened has nothing to compare its parse against
     withTasksPlugin();
     const md = board().replace('- [ ] Write the smoke test', '- [x] Write the smoke test');
     const harness = await loadBoard(md);
 
-    // an unrelated edit elsewhere in the file
-    await harness.externalChange(md.replace('- [ ] Water the plants', '- [ ] Water the flowers'));
+    expect(harness.board().children[0].children.map((i) => i.data.titleRaw)).toEqual([
+      'Water the plants 🔁 every week 📅 2026-08-07',
+    ]);
+    expect(harness.board().children[1].children.map((i) => i.data.titleRaw)).toEqual([
+      'Older finished thing ✅ 2026-08-01',
+      'Write the smoke test',
+    ]);
+    expect(harness.markdown()).toContain('- [x] Write the smoke test');
+  });
+
+  it('leaves a card complete inside a list marked **Complete** alone', async () => {
+    withTasksPlugin();
+    const md = board().replace(
+      '## Todo\n\n- [ ] Write the smoke test',
+      '## Todo\n\n**Complete**\n\n- [x] Write the smoke test'
+    );
+    const harness = await loadBoard(md);
 
     expect(harness.board().children[0].children.map((i) => i.data.titleRaw)).toEqual([
       'Write the smoke test',
-      'Water the flowers 🔁 every week 📅 2026-08-07',
+      'Water the plants 🔁 every week 📅 2026-08-07',
     ]);
+    expect(harness.view.saved).toEqual([]);
   });
 });
 
