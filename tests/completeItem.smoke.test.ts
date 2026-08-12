@@ -309,6 +309,103 @@ describe('completing a card, end to end', () => {
   });
 });
 
+describe('a checkbox ticked outside the board', () => {
+  /**
+   * What a Dataview or Tasks query writes into the file: the checkbox flips and
+   * the line picks up a completion date. No board code runs, so the board only
+   * sees it on the reparse that the file change triggers.
+   */
+  function tickedInAQuery(md: string, title: string) {
+    return md.replace(`- [ ] ${title}`, `- [x] ${title} [completion:: ${TODAY}]`);
+  }
+
+  it('moves the card to the done lane and writes it back', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board());
+
+    await harness.externalChange(tickedInAQuery(board(), 'Write the smoke test'));
+
+    expect(harness.errors()).toEqual([]);
+    expect(harness.board().children.map((l) => l.children.map((i) => i.data.titleRaw))).toEqual([
+      ['Water the plants 🔁 every week 📅 2026-08-07'],
+      ['Older finished thing ✅ 2026-08-01', `Write the smoke test [completion:: ${TODAY}]`],
+    ]);
+    expect(harness.markdown()).toMatch(
+      new RegExp(
+        `## Done\\n\\n\\*\\*Complete\\*\\*\\n- \\[x\\] Older finished thing ✅ 2026-08-01\\n- \\[x\\] Write the smoke test \\[completion:: ${TODAY}\\]`
+      )
+    );
+  });
+
+  it('keeps the card in place when the setting is off', async () => {
+    withTasksPlugin();
+    const md = board({ autoMove: false });
+    const harness = await loadBoard(md);
+
+    await harness.externalChange(tickedInAQuery(md, 'Write the smoke test'));
+
+    expect(harness.board().children[0].children.map((i) => i.data.titleRaw)).toEqual([
+      `Write the smoke test [completion:: ${TODAY}]`,
+      'Water the plants 🔁 every week 📅 2026-08-07',
+    ]);
+    expect(harness.board().children[1].children).toHaveLength(1);
+  });
+
+  it('does not write anything when the reload changes nothing', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board());
+
+    await harness.externalChange(board());
+
+    expect(harness.view.saved).toEqual([]);
+  });
+
+  it('settles after one move, rather than rewriting the file on every reload', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board());
+
+    await harness.externalChange(tickedInAQuery(board(), 'Write the smoke test'));
+    const afterMove = harness.view.saved.length;
+
+    // the write lands back on disk and comes round again
+    await harness.externalChange(harness.markdown());
+
+    expect(harness.view.saved).toHaveLength(afterMove);
+  });
+
+  it('moves a card that was already complete when the board was opened', async () => {
+    // the rule is the invariant, not "was ticked a moment ago": a board that was
+    // closed when the tick happened has nothing to compare its parse against
+    withTasksPlugin();
+    const md = board().replace('- [ ] Write the smoke test', '- [x] Write the smoke test');
+    const harness = await loadBoard(md);
+
+    expect(harness.board().children[0].children.map((i) => i.data.titleRaw)).toEqual([
+      'Water the plants 🔁 every week 📅 2026-08-07',
+    ]);
+    expect(harness.board().children[1].children.map((i) => i.data.titleRaw)).toEqual([
+      'Older finished thing ✅ 2026-08-01',
+      'Write the smoke test',
+    ]);
+    expect(harness.markdown()).toContain('- [x] Write the smoke test');
+  });
+
+  it('leaves a card complete inside a list marked **Complete** alone', async () => {
+    withTasksPlugin();
+    const md = board().replace(
+      '## Todo\n\n- [ ] Write the smoke test',
+      '## Todo\n\n**Complete**\n\n- [x] Write the smoke test'
+    );
+    const harness = await loadBoard(md);
+
+    expect(harness.board().children[0].children.map((i) => i.data.titleRaw)).toEqual([
+      'Write the smoke test',
+      'Water the plants 🔁 every week 📅 2026-08-07',
+    ]);
+    expect(harness.view.saved).toEqual([]);
+  });
+});
+
 describe('the example board in the demo vault', () => {
   const examplePath = resolve(__dirname, '../demo_vault/Auto-move completed cards.md');
 

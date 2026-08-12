@@ -10,7 +10,8 @@ destination board.
   Lists are loaded only after a board is picked, because they differ per board and the board may not be open.
   Boards are labelled by path minus `.md`, so two boards with the same basename stay distinguishable.
 - `src/helpers/moveCardToBoard.ts` does the move: `listKanbanBoards`, `findOpenStateManager`, `getDestinationLanes`, `moveCardToBoard`.
-- `src/helpers/boardMarkdown.ts` reads and edits a board **file** — `parseLanesFromMarkdown`, `insertItemIntoLane`, `parseSettingsFromMarkdown` — with no `StateManager` involved.
+- `src/helpers/boardMarkdown.ts` reads and edits a board **file** — `parseLanesFromMarkdown`, `parseCardsInLane`, `insertItemIntoLane`, `parseSettingsFromMarkdown` / `parseBoardSettings` — with no `StateManager` involved.
+  The closed-board auto-move uses it too, see [card-completion.md](card-completion.md); it is the fork's one place for "edit a board that is not open".
 
 ## The two write paths
 

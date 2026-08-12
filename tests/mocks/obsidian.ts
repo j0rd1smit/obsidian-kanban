@@ -79,8 +79,23 @@ export function parseLinktext(link: string) {
   return { path, subpath: subpath ? `#${subpath}` : '' };
 }
 
+/**
+ * Calls straight through rather than waiting, so a test does not have to run the
+ * clock forward. `cancel` / `run` are there because callers hold on to the
+ * `Debouncer` and use them.
+ */
 export function debounce<T extends (...args: any[]) => any>(fn: T) {
-  return fn;
+  const debounced = ((...args: any[]) => {
+    fn(...args);
+    return debounced;
+  }) as any;
+
+  // annotated because `strictNullChecks` is off and a bare `undefined` return
+  // widens to `any`, which `noImplicitAny` then rejects
+  debounced.cancel = (): any => debounced;
+  debounced.run = (): void => undefined;
+
+  return debounced;
 }
 
 export function setIcon() {}

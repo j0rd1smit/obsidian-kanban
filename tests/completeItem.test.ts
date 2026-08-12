@@ -1,6 +1,7 @@
 import { LaneSort } from 'src/components/types';
 import {
   DEFAULT_DONE_LANE_NAME,
+  autoMoveCompletedItems,
   autoMoveDoneItem,
   findLaneIndexByTitle,
   isItemComplete,
@@ -301,5 +302,100 @@ describe('autoMoveDoneItem', () => {
     const next = autoMoveDoneItem(board, [0, 0], [makeItem('a', 'x')], 0, enabled);
 
     expect(boardShape(next)).toEqual({ Todo: [], Done: ['a'] });
+  });
+});
+
+describe('autoMoveCompletedItems', () => {
+  it('moves a complete card that sits outside the done lane', () => {
+    const board = makeBoard([
+      makeLane('Todo', [makeItem('write tests'), makeItem('write docs', 'x')]),
+      makeLane('Done', [makeItem('older finished thing', 'x')]),
+    ]);
+
+    expect(boardShape(autoMoveCompletedItems(board, enabled))).toEqual({
+      Todo: ['write tests'],
+      Done: ['older finished thing', 'write docs'],
+    });
+  });
+
+  it('moves every misplaced card, in board order', () => {
+    const board = makeBoard([
+      makeLane('Todo', [makeItem('a', 'x'), makeItem('b')]),
+      makeLane('Doing', [makeItem('c', 'x')]),
+      makeLane('Done', [makeItem('d', 'x')]),
+    ]);
+
+    expect(boardShape(autoMoveCompletedItems(board, enabled))).toEqual({
+      Todo: ['b'],
+      Doing: [],
+      Done: ['d', 'a', 'c'],
+    });
+  });
+
+  it('returns the board itself when the invariant already holds', () => {
+    const board = threeLaneBoard();
+    expect(autoMoveCompletedItems(board, enabled)).toBe(board);
+  });
+
+  it('leaves a list marked **Complete** alone', () => {
+    // its cards are complete because of the list, not because anyone ticked them
+    const board = makeBoard([
+      makeLane('Archive', [makeItem('shipped', 'x')], { shouldMarkItemsComplete: true }),
+      makeLane('Done', [makeItem('older finished thing', 'x')]),
+    ]);
+
+    expect(autoMoveCompletedItems(board, enabled)).toBe(board);
+  });
+
+  it('ignores cards checked into a non-done status', () => {
+    const board = makeBoard([
+      makeLane('Doing', [makeItem('in progress', '/')]),
+      makeLane('Done', []),
+    ]);
+
+    expect(autoMoveCompletedItems(board, enabled)).toBe(board);
+  });
+
+  it('does nothing when the feature is off', () => {
+    const board = makeBoard([makeLane('Todo', [makeItem('a', 'x')]), makeLane('Done', [])]);
+
+    expect(autoMoveCompletedItems(board, { ...enabled, enabled: false })).toBe(board);
+  });
+
+  it('does nothing when no lane matches the configured name', () => {
+    const board = makeBoard([makeLane('Todo', [makeItem('a', 'x')]), makeLane('Done', [])]);
+
+    expect(autoMoveCompletedItems(board, { enabled: true, laneName: 'Finished' })).toBe(board);
+  });
+
+  it('leaves the board it was given untouched', () => {
+    const board = makeBoard([makeLane('Todo', [makeItem('a', 'x')]), makeLane('Done', [])]);
+
+    autoMoveCompletedItems(board, enabled);
+
+    expect(boardShape(board)).toEqual({ Todo: ['a'], Done: [] });
+  });
+
+  it('honours the insertion method', () => {
+    const board = makeBoard([
+      makeLane('Todo', [makeItem('a', 'x')]),
+      makeLane('Done', [makeItem('b', 'x')]),
+    ]);
+
+    const next = autoMoveCompletedItems(board, { ...enabled, insertionMethod: 'prepend' });
+
+    expect(boardShape(next).Done).toEqual(['a', 'b']);
+  });
+
+  it('clears the sort flag on the done lane', () => {
+    const board = makeBoard([
+      makeLane('Todo', [makeItem('a', 'x')]),
+      makeLane('Done', [makeItem('b', 'x')], { sorted: LaneSort.TitleAsc }),
+    ]);
+
+    const next = autoMoveCompletedItems(board, enabled);
+
+    expect(next.children[1].data.sorted).toBeUndefined();
+    expect(boardShape(next)).toEqual({ Todo: [], Done: ['b', 'a'] });
   });
 });

@@ -9,12 +9,14 @@
   `server.deps.inline` and `ssr.noExternal` both fail to stop the externalization.
 - `tests/setup.ts` installs the prototype extensions Obsidian adds (`Array.prototype.last` and friends — `dnd/util/data.ts` depends on `last()`), a `window`/`activeWindow`, and a global `app` stub.
   `stubApp({ tasksPlugin, tasksSettings })` swaps in a fake Tasks plugin, which is how the recurring-task behavior is tested.
+  The `debounce` stub calls straight through instead of waiting, so a debounced code path runs inside the test that triggers it.
 - The environment is `jsdom`, because `Settings.ts` pulls in `choices.js`, which touches `document` at import time.
 - `tests/helpers/harness.ts` boots a **real** `StateManager` over a markdown string with a `FakeKanbanView`.
   `view.saved` collects what `saveToDisk` writes, so a smoke test can assert on markdown in / markdown out through the real parser, settings resolution and serializer.
   `registerView` is async and the constructor does not await it, hence the small delay in `loadBoard`.
+  `harness.externalChange(md)` replays what Obsidian does when the file changes on disk under an open board, which is how the reparse-side auto-move is tested. See [card-completion.md](card-completion.md).
 - The round-trip test in `tests/completeItem.smoke.test.ts` is the guard for "existing boards must keep parsing" — it asserts serialization is stable across a reparse.
-- Two tests load the demo vault's board from disk, so an example that stops working fails the suite.
+- Several tests load the demo vault's boards from disk, so an example that stops working fails the suite.
   See [demo-vault.md](demo-vault.md).
 
 ## Two tiers
@@ -42,6 +44,7 @@ Files, and the behavior each pins:
 The fork's own tier, and what each file pins:
 
 - `completeItem.test.ts` / `completeItem.smoke.test.ts` — the checkbox handler and the auto-move-to-done setting.
+- `sweepCompletedCards.test.ts` — the same rule applied to a board file no view has open, including that both paths land the card in the same place, and that the demo vault's `Completed from a query.md` still demonstrates what its note claims. See [card-completion.md](card-completion.md).
 - `boardMarkdown.test.ts` — reading a board file's lists and splicing a card line into one, checked against the real parser at the end.
 - `moveCardToBoard.test.ts` — moving a card to another board, both write paths. `fakeVault` in that file backs `app.vault` with an in-memory map for the closed-board path. See [cross-board-card-moves.md](cross-board-card-moves.md).
 

@@ -1,8 +1,9 @@
 import update from 'immutability-helper';
+import { KanbanSettings } from 'src/Settings';
 import { StateManager } from 'src/StateManager';
 import { Board, Item } from 'src/components/types';
 import { Path } from 'src/dnd/types';
-import { insertEntity, removeEntity, updateEntity } from 'src/dnd/util/data';
+import { getEntityFromPath, insertEntity, removeEntity, updateEntity } from 'src/dnd/util/data';
 import { getTaskStatusDone, toggleTask } from 'src/parsers/helpers/inlineMetadata';
 
 import type { BoardModifiers } from './boardModifiers';
@@ -58,20 +59,43 @@ export function toggleItemCheckbox(
   return boardModifiers.completeItem(path, [next], 0);
 }
 
+/**
+ * The three settings the auto-move reads, resolved through `getSetting`.
+ *
+ * `settings` is the per-board block to resolve against. Pass it when the board
+ * those settings came from is not (yet) the state manager's current state — a
+ * freshly parsed board, for instance.
+ */
+export function autoMoveDoneOptions(
+  stateManager: Pick<StateManager, 'getSetting'>,
+  settings?: KanbanSettings
+): AutoMoveDoneOptions {
+  return {
+    enabled: !!stateManager.getSetting('auto-move-done-to-lane', settings),
+    laneName: stateManager.getSetting('done-lane-name', settings) || DEFAULT_DONE_LANE_NAME,
+    insertionMethod: stateManager.getSetting('new-card-insertion-method', settings),
+  };
+}
+
 export function isItemComplete(item: Item): boolean {
   return !!item?.data.checked && item.data.checkChar === getTaskStatusDone();
 }
 
 /**
- * Index of the first lane whose title matches `laneName`, or -1.
- * Lane titles are compared trimmed and case-insensitively; `lane.data.title`
- * already has the `(n)` max-items suffix stripped by `parseLaneTitle`.
+ * Whether a lane title is the configured done lane. Compared trimmed and
+ * case-insensitively; a title reaches this with the `(n)` max-items suffix
+ * already stripped, by `parseLaneTitle` on both the board and the file path.
  */
-export function findLaneIndexByTitle(board: Board, laneName: string): number {
+export function matchesLaneName(title: string, laneName: string): boolean {
   const target = laneName?.trim().toLowerCase();
-  if (!target) return -1;
+  if (!target) return false;
 
-  return board.children.findIndex((lane) => lane.data.title?.trim().toLowerCase() === target);
+  return title?.trim().toLowerCase() === target;
+}
+
+/** Index of the first lane whose title matches `laneName`, or -1. */
+export function findLaneIndexByTitle(board: Board, laneName: string): number {
+  return board.children.findIndex((lane) => matchesLaneName(lane.data.title, laneName));
 }
 
 function replaceInPlace(board: Board, path: Path, items: Item[]): Board {
@@ -131,4 +155,52 @@ export function autoMoveDoneItem(
   }
 
   return moved;
+}
+
+/** Path of the card with this id, or undefined. */
+function findItemPathById(board: Board, id: string): Path | undefined {
+  for (let laneIndex = 0; laneIndex < board.children.length; laneIndex++) {
+    const itemIndex = board.children[laneIndex].children.findIndex((item) => item.id === id);
+    if (itemIndex !== -1) return [laneIndex, itemIndex];
+  }
+}
+
+/**
+ * The invariant the setting promises, applied to a whole board: with auto-move
+ * on, a complete card does not sit outside the done lane.
+ *
+ * This is what catches a checkbox ticked outside the board — a Dataview or Tasks
+ * query writes straight into the file, so none of the code above runs and the
+ * board only sees the result when it parses the file again. There is nothing to
+ * compare that parse against for a board that was closed at the time, so the
+ * rule is the invariant rather than "was ticked a moment ago"; a card left
+ * complete in the wrong lane is moved whenever the board is next parsed.
+ *
+ * Lists marked `**Complete**` are the way out: their cards are complete because
+ * of the list, so they are left where they are. The archive is not a lane and is
+ * never touched. `sweepCompletedCards` applies the same rule to a board file
+ * that no view has open.
+ */
+export function autoMoveCompletedItems(board: Board, options: AutoMoveDoneOptions): Board {
+  if (!options.enabled) return board;
+
+  const doneLaneIndex = findLaneIndexByTitle(board, options.laneName);
+  if (doneLaneIndex === -1) return board;
+
+  const misplaced: string[] = [];
+  board.children.forEach((lane, laneIndex) => {
+    if (laneIndex === doneLaneIndex || lane.data.shouldMarkItemsComplete) return;
+    for (const item of lane.children) {
+      if (isItemComplete(item)) misplaced.push(item.id);
+    }
+  });
+
+  // One at a time, re-finding each card: an earlier move shifts the paths
+  return misplaced.reduce((next, id) => {
+    const path = findItemPathById(next, id);
+    if (!path) return next;
+
+    const item = getEntityFromPath(next, path) as Item;
+    return autoMoveDoneItem(next, path, [item], 0, options);
+  }, board);
 }

@@ -1,5 +1,7 @@
 import {
   insertItemIntoLane,
+  parseBoardSettings,
+  parseCardsInLane,
   parseLanesFromMarkdown,
   parseSettingsFromMarkdown,
 } from 'src/helpers/boardMarkdown';
@@ -172,6 +174,81 @@ describe('parseSettingsFromMarkdown', () => {
   it('is empty for a board without a footer, or with a broken one', () => {
     expect(parseSettingsFromMarkdown('## Todo\n')).toEqual({});
     expect(parseSettingsFromMarkdown('%% kanban:settings\n```\n{nope\n```\n%%')).toEqual({});
+  });
+});
+
+describe('parseCardsInLane', () => {
+  const cardsIn = (md: string, laneIndex: number) =>
+    parseCardsInLane(md.split('\n'), parseLanesFromMarkdown(md)[laneIndex]);
+
+  it("finds a list's cards with their check characters", () => {
+    expect(cardsIn(board, 0).map((c) => c.checkChar)).toEqual([' ', ' ']);
+    expect(cardsIn(board, 2).map((c) => c.checkChar)).toEqual(['x']);
+  });
+
+  it('gives each card the lines it occupies', () => {
+    const lines = board.split('\n');
+    const [first] = cardsIn(board, 0);
+
+    expect(lines.slice(first.startLine, first.endLine)).toEqual(['- [ ] First']);
+  });
+
+  it('takes the indented continuation lines of a multi-line card', () => {
+    const md = wrapBoard(['## Todo', '', '- [ ] Spans', '    a second line', '- [ ] Next', '', '']);
+    const lines = md.split('\n');
+    const cards = cardsIn(md, 0);
+
+    expect(cards).toHaveLength(2);
+    expect(lines.slice(cards[0].startLine, cards[0].endLine)).toEqual([
+      '- [ ] Spans',
+      '    a second line',
+    ]);
+  });
+
+  it('reads an indented checkbox as part of the card above it, not as a card', () => {
+    const md = wrapBoard(['## Todo', '', '- [ ] Has a checklist', '    - [x] step one', '', '']);
+
+    expect(cardsIn(md, 0)).toHaveLength(1);
+  });
+
+  it('finds nothing in an empty list', () => {
+    expect(cardsIn(board, 1)).toEqual([]);
+  });
+
+  it('does not reach past the list it was given', () => {
+    // the archive sits after the `***`, which parseLanesFromMarkdown stops at
+    expect(cardsIn(board, 2).map((c) => c.checkChar)).toEqual(['x']);
+  });
+});
+
+describe('parseBoardSettings', () => {
+  it('reads the settings footer', () => {
+    expect(parseBoardSettings(wrapBoard(['## Todo', ''], { 'done-lane-name': 'Klaar' }))).toEqual({
+      'kanban-plugin': 'board',
+      'done-lane-name': 'Klaar',
+    });
+  });
+
+  it('lets a setting in the frontmatter win, as the parser does', () => {
+    const md = wrapBoard(['## Todo', ''], { 'done-lane-name': 'Klaar' }).replace(
+      'kanban-plugin: board\n',
+      'kanban-plugin: board\ndone-lane-name: Afgerond\n'
+    );
+
+    expect(parseBoardSettings(md)['done-lane-name']).toBe('Afgerond');
+  });
+
+  it('ignores frontmatter keys that are not settings', () => {
+    const md = wrapBoard(['## Todo', '']).replace(
+      'kanban-plugin: board\n',
+      'kanban-plugin: board\nauthor: nobody\n'
+    );
+
+    expect(parseBoardSettings(md)).not.toHaveProperty('author');
+  });
+
+  it('copes with a board that has no frontmatter at all', () => {
+    expect(parseBoardSettings('## Todo\n\n- [ ] a\n')).toEqual({});
   });
 });
 
