@@ -22,8 +22,13 @@ The build output isn't committed; `yarn build:demo` regenerates it.
 - [[Move cards between boards]] — a second board, so a card's "Move to other
   board" menu item has somewhere to go. Try it with this board closed too: the
   card is written straight into the file.
+- [[Completed from a query]] — for ticking cards from somewhere other than the
+  board. [[Tick a card from a query]] holds the Dataview and Tasks queries and
+  the things worth trying, including the case that matters: the board closed.
 
 The recurring cards need the [Tasks](https://publish.obsidian.md/tasks/) plugin
 to do anything interesting: without it they're ordinary cards, with it ticking
 one leaves the next occurrence behind in `Todo` and sends the completed
-occurrence to `Done` with a `✅` date.
+occurrence to `Done` with a `✅` date. The query note also wants
+[Dataview](https://blacksmithgu.github.io/obsidian-dataview/). Both are listed
+in `.obsidian/community-plugins.json`, so they enable themselves once installed.

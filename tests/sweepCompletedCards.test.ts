@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
   ClosedBoardSweeper,
   boardFileAutoMoveOptions,
@@ -446,5 +448,60 @@ describe('what the sweep leaves behind', () => {
 
     expect(harness.errors()).toEqual([]);
     expect(harness.board().children.map((l) => l.children.length)).toEqual([0, 2]);
+  });
+});
+
+describe('the query board in the demo vault', () => {
+  const examplePath = resolve(__dirname, '../demo_vault/Completed from a query.md');
+  const example = () => readFileSync(examplePath, 'utf8');
+  const ticked = (md: string, title: string) =>
+    md.replace(`- [ ] ${title}`, `- [x] ${title} [completion:: 2026-08-12]`);
+
+  it('parses, with the setting the note it documents promises', async () => {
+    const harness = await loadBoard(example());
+
+    expect(harness.errors()).toEqual([]);
+    expect(harness.board().children.map((l) => l.data.title)).toEqual([
+      'Todo',
+      'Doing',
+      'Done',
+      'Kept as-is',
+    ]);
+    expect(harness.stateManager.getSetting('auto-move-done-to-lane')).toBe(true);
+  });
+
+  it('is already in the shape the serializer writes, so opening it changes nothing', async () => {
+    const harness = await loadBoard(example());
+
+    harness.stateManager.setState((b) => b);
+
+    expect(harness.markdown()).toBe(example());
+  });
+
+  it('sends a card ticked in a query to Done, board closed', () => {
+    const md = ticked(example(), 'Tick me from the query in [[Tick a card from a query]]');
+    const swept = sweepCompletedCards(md, boardFileAutoMoveOptions(md, {}));
+
+    expect(swept).toContain(
+      '- [x] Finished before any of this ✅ 2026-08-01\n- [x] Tick me from the query'
+    );
+    expect(swept).not.toMatch(/## Todo\n\n- \[x\]/);
+  });
+
+  it('leaves the list it marks as the opt-out alone', () => {
+    const md = example();
+
+    expect(sweepCompletedCards(md, boardFileAutoMoveOptions(md, {}))).toBeNull();
+  });
+
+  it('sends a card ticked in a query to Done, board open', async () => {
+    const harness = await loadBoard(example());
+
+    await harness.externalChange(ticked(example(), 'Tick me while this board is open in a tab'));
+
+    const [todo, , done, keptAsIs] = harness.board().children;
+    expect(todo.children).toHaveLength(2);
+    expect(done.children.at(-1).data.titleRaw).toContain('Tick me while this board is open');
+    expect(keptAsIs.children).toHaveLength(1);
   });
 });
