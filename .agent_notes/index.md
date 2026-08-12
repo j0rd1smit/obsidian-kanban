@@ -13,7 +13,7 @@ architecture/parsing.md: parseMarkdown and astToUnhydratedBoard, hydration, the 
 architecture/settings.md: global / per-board / per-view layers, getSetting resolution order, compileSettings, shouldRefreshBoard, and how to add a setting.
 architecture/drag-and-drop.md: custom DnD in src/dnd, the handleDrop branches, moveEntity + maybeCompleteForMove, and how to build a synthetic card move.
 architecture/cross-board-card-moves.md: the card menu's "Move to other board" flow, and the two write paths for a destination board (open -> its StateManager, closed -> its markdown file).
-architecture/card-completion.md: checkbox handling in src/helpers/completeItem.ts, Tasks-plugin recurring tasks, and the auto-move-to-done settings.
+architecture/card-completion.md: checkbox handling in src/helpers/completeItem.ts, Tasks-plugin recurring tasks, the auto-move-to-done settings, and the reparse path that catches cards completed from a dataview/tasks query.
 architecture/testing.md: vitest setup, obsidian module stubs, the real-StateManager harness, the markdown round-trip guard, and the two test tiers (fork code in depth, upstream behaviour by smoke test in tests/upstream/).
 architecture/demo-vault.md: demo_vault/ as a real Obsidian vault, yarn build:demo / dev:demo, and what is gitignored.
 architecture/ci.md: the GitHub Actions gate and yarn ci — install/lockfile/typecheck/lint/format/test/build, the three tsconfig programs (json / tests / eslint), the lockfile transport check, and the one-button release workflow.
@@ -32,3 +32,4 @@ changelog/2026-08-11-typecheck-tests-in-ci.md: tsconfig.tests.json + yarn typech
 changelog/2026-08-11-release-from-a-button-in-the-actions-tab.md: release.yml gains a workflow_dispatch patch/minor/major button that bumps, runs yarn ci, tags and publishes; the tag-push path stays as an escape hatch.
 changelog/2026-08-11-move-a-card-to-another-board-from-the-card-menu.md: "Move to other board" in the card menu — board picker, then list picker, writing through the destination's StateManager when it is open and into its file when it is not.
 changelog/2026-08-11-keep-a-passing-test-run-quiet.md: the two parse-failure tests stub console.error and assert it was called, plus restoreMocks in vitest.config.ts, so a green run prints no stack traces.
+changelog/2026-08-12-auto-move-cards-completed-from-a-dataview-or-tasks-query.md: issue #16 — the auto-move also runs on the reparse after an external file change, moving cards that just flipped to complete; needs the board open.

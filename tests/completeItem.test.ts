@@ -2,6 +2,7 @@ import { LaneSort } from 'src/components/types';
 import {
   DEFAULT_DONE_LANE_NAME,
   autoMoveDoneItem,
+  autoMoveExternallyCompletedItems,
   findLaneIndexByTitle,
   isItemComplete,
 } from 'src/helpers/completeItem';
@@ -301,5 +302,148 @@ describe('autoMoveDoneItem', () => {
     const next = autoMoveDoneItem(board, [0, 0], [makeItem('a', 'x')], 0, enabled);
 
     expect(boardShape(next)).toEqual({ Todo: [], Done: ['a'] });
+  });
+});
+
+describe('autoMoveExternallyCompletedItems', () => {
+  /**
+   * Two parses of the same board, so cards keep their ids the way the diff/patch
+   * reparse keeps them. `chars` is the checkbox character per card id, and a card
+   * given a title takes that instead — a Dataview tick rewrites the line as well
+   * as the checkbox.
+   */
+  function parse(
+    chars: Record<string, string> = {},
+    titles: Record<string, string> = {}
+  ): ReturnType<typeof makeBoard> {
+    const card = (id: string, title: string, checkChar: string = ' ') =>
+      makeItem(titles[id] ?? title, chars[id] ?? checkChar, id);
+
+    return makeBoard([
+      makeLane('Todo', [card('a', 'write tests'), card('b', 'write docs')]),
+      makeLane('Doing', [card('c', 'build the thing')]),
+      makeLane('Done', [card('d', 'older finished thing', 'x')]),
+    ]);
+  }
+
+  it('moves a card that was ticked outside the board', () => {
+    const next = autoMoveExternallyCompletedItems(
+      parse(),
+      parse({ c: 'x' }, { c: 'build the thing [completion:: 2026-08-12]' }),
+      enabled
+    );
+
+    expect(boardShape(next)).toEqual({
+      Todo: ['write tests', 'write docs'],
+      Doing: [],
+      Done: ['older finished thing', 'build the thing [completion:: 2026-08-12]'],
+    });
+  });
+
+  it('returns the parsed board itself when nothing was completed', () => {
+    const parsed = parse();
+    expect(autoMoveExternallyCompletedItems(parse(), parsed, enabled)).toBe(parsed);
+  });
+
+  it('leaves a card that was already complete where it is', () => {
+    // complete in both parses: nothing happened, it just lives outside Done
+    const previous = parse({ b: 'x' });
+    const parsed = parse({ b: 'x' });
+
+    expect(autoMoveExternallyCompletedItems(previous, parsed, enabled)).toBe(parsed);
+  });
+
+  it('leaves a card that is new to this parse alone', () => {
+    const previous = parse();
+    const parsed = makeBoard([
+      makeLane('Todo', [makeItem('typed in by hand', 'x', 'new')]),
+      makeLane('Done', [makeItem('older finished thing', 'x', 'd')]),
+    ]);
+
+    expect(boardShape(autoMoveExternallyCompletedItems(previous, parsed, enabled))).toEqual({
+      Todo: ['typed in by hand'],
+      Done: ['older finished thing'],
+    });
+  });
+
+  it('moves every card completed in the same edit', () => {
+    const next = autoMoveExternallyCompletedItems(parse(), parse({ a: 'x', c: 'x' }), enabled);
+
+    expect(boardShape(next)).toEqual({
+      Todo: ['write docs'],
+      Doing: [],
+      Done: ['older finished thing', 'write tests', 'build the thing'],
+    });
+  });
+
+  it('ignores a card checked into a non-done status', () => {
+    const parsed = parse({ c: '/' });
+    expect(autoMoveExternallyCompletedItems(parse(), parsed, enabled)).toBe(parsed);
+  });
+
+  it('ignores a card that was unchecked outside the board', () => {
+    const parsed = parse({ d: ' ' });
+    expect(autoMoveExternallyCompletedItems(parse(), parsed, enabled)).toBe(parsed);
+  });
+
+  it('ignores a card completed inside the done lane', () => {
+    const previous = parse({ d: ' ' });
+    const parsed = parse();
+
+    expect(autoMoveExternallyCompletedItems(previous, parsed, enabled)).toBe(parsed);
+  });
+
+  it('does nothing on the first parse, when there is no previous board', () => {
+    const parsed = parse({ c: 'x' });
+    expect(autoMoveExternallyCompletedItems(undefined, parsed, enabled)).toBe(parsed);
+  });
+
+  it('does nothing when the feature is off', () => {
+    const parsed = parse({ c: 'x' });
+
+    expect(autoMoveExternallyCompletedItems(parse(), parsed, { ...enabled, enabled: false })).toBe(
+      parsed
+    );
+  });
+
+  it('does nothing when no lane matches the configured name', () => {
+    const parsed = parse({ c: 'x' });
+
+    expect(
+      autoMoveExternallyCompletedItems(parse(), parsed, { enabled: true, laneName: 'Finished' })
+    ).toBe(parsed);
+  });
+
+  it('leaves the parsed board untouched', () => {
+    const parsed = parse({ c: 'x' });
+
+    autoMoveExternallyCompletedItems(parse(), parsed, enabled);
+
+    expect(boardShape(parsed).Doing).toEqual(['build the thing']);
+  });
+
+  it('clears the sort flag on the done lane', () => {
+    const previous = makeBoard([
+      makeLane('Todo', [makeItem('a', ' ', 'a')]),
+      makeLane('Done', [makeItem('b', 'x', 'b')], { sorted: LaneSort.TitleAsc }),
+    ]);
+    const parsed = makeBoard([
+      makeLane('Todo', [makeItem('a', 'x', 'a')]),
+      makeLane('Done', [makeItem('b', 'x', 'b')], { sorted: LaneSort.TitleAsc }),
+    ]);
+
+    const next = autoMoveExternallyCompletedItems(previous, parsed, enabled);
+
+    expect(next.children[1].data.sorted).toBeUndefined();
+    expect(boardShape(next)).toEqual({ Todo: [], Done: ['b', 'a'] });
+  });
+
+  it('honours the insertion method', () => {
+    const next = autoMoveExternallyCompletedItems(parse(), parse({ c: 'x' }), {
+      ...enabled,
+      insertionMethod: 'prepend',
+    });
+
+    expect(boardShape(next).Done).toEqual(['build the thing', 'older finished thing']);
   });
 });

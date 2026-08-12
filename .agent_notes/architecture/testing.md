@@ -13,6 +13,7 @@
 - `tests/helpers/harness.ts` boots a **real** `StateManager` over a markdown string with a `FakeKanbanView`.
   `view.saved` collects what `saveToDisk` writes, so a smoke test can assert on markdown in / markdown out through the real parser, settings resolution and serializer.
   `registerView` is async and the constructor does not await it, hence the small delay in `loadBoard`.
+  `harness.externalChange(md)` replays what Obsidian does when the file changes on disk under an open board, which is how the reparse-side auto-move is tested. See [card-completion.md](card-completion.md).
 - The round-trip test in `tests/completeItem.smoke.test.ts` is the guard for "existing boards must keep parsing" — it asserts serialization is stable across a reparse.
 - Two tests load the demo vault's board from disk, so an example that stops working fails the suite.
   See [demo-vault.md](demo-vault.md).

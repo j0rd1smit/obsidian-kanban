@@ -63,6 +63,12 @@ export interface Harness {
   /** The markdown last written back to disk. */
   markdown: () => string;
   errors: () => string[];
+  /**
+   * The file changed on disk under an open board. Obsidian re-reads it and hands
+   * the new contents to `setViewData`, which lands on `registerView` for the
+   * primary view — this is that call.
+   */
+  externalChange: (md: string) => Promise<void>;
 }
 
 /**
@@ -96,6 +102,10 @@ export async function loadBoard(
     board: () => stateManager.state,
     markdown: () => view.saved[view.saved.length - 1] ?? '',
     errors: () => stateManager.state.data.errors.map((e) => e.description),
+    externalChange: async (md: string) => {
+      view.data = md;
+      await stateManager.registerView(view as any, md, true);
+    },
   };
 }
 
