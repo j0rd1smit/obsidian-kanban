@@ -19,6 +19,9 @@ The build output isn't committed; `yarn build:demo` regenerates it.
 - [[Auto-move completed cards]] — ticking a card's checkbox moves it to the
   `Done` list. The setting is enabled on the board itself, so it works whatever
   your global setting says.
+- [[Move cards between boards]] — a second board, so a card's "Move to other
+  board" menu item has somewhere to go. Try it with this board closed too: the
+  card is written straight into the file.
 
 The recurring cards need the [Tasks](https://publish.obsidian.md/tasks/) plugin
 to do anything interesting: without it they're ordinary cards, with it ticking

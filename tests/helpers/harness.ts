@@ -69,8 +69,12 @@ export interface Harness {
  * Boots a real `StateManager` over `md`, so tests exercise the actual parser,
  * settings resolution, board modifiers and serializer.
  */
-export async function loadBoard(md: string, globalSettings: KanbanSettings = {}): Promise<Harness> {
-  const view = new FakeKanbanView(new TFile('Board.md'));
+export async function loadBoard(
+  md: string,
+  globalSettings: KanbanSettings = {},
+  path: string = 'Board.md'
+): Promise<Harness> {
+  const view = new FakeKanbanView(new TFile(path));
 
   const stateManager = new StateManager(
     (globalThis as any).app,

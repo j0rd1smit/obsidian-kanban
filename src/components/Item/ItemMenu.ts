@@ -9,6 +9,7 @@ import { t } from 'src/lang/helpers';
 import { BoardModifiers } from '../../helpers/boardModifiers';
 import { applyTemplate, escapeRegExpStr, generateInstanceId } from '../helpers';
 import { EditState, Item } from '../types';
+import { promptMoveToBoard } from './MoveToBoardPrompt';
 import {
   constructDatePicker,
   constructMenuDatePickerOnChange,
@@ -296,6 +297,12 @@ export function useItemMenu({
           addMoveToOptions(submenu);
         });
       }
+
+      menu.addItem((i) => {
+        i.setIcon('lucide-forward')
+          .setTitle(t('Move to other board'))
+          .onClick(() => promptMoveToBoard({ stateManager, path, item }));
+      });
 
       menu.showAtPosition(coordinates);
     },

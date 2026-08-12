@@ -95,6 +95,7 @@ export class App extends Stub {}
 export class Component extends Stub {}
 export class Editor extends Stub {}
 export class EditorSuggest extends Stub {}
+export class FuzzySuggestModal extends Stub {}
 export class HoverPopover extends Stub {}
 export class Keymap extends Stub {}
 export class MarkdownRenderer extends Stub {}

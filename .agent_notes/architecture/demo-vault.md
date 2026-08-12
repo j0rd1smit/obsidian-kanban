@@ -8,5 +8,6 @@
 - The built plugin folder and `workspace.json` are gitignored; the vault's notes and `community-plugins.json` are not.
 - `yarn build` / `yarn dev` are unchanged and still write `main.js` + `styles.css` to the repo root.
 
-Two tests load this vault's board from disk, so breaking an example board fails `yarn test`.
+The vault has two boards: `Auto-move completed cards.md` and `Move cards between boards.md`, the second one being somewhere for a card to move to.
+Two tests load the first from disk, so breaking that example board fails `yarn test`.
 See [testing.md](testing.md).
