@@ -34,3 +34,4 @@ changelog/2026-08-11-move-a-card-to-another-board-from-the-card-menu.md: "Move t
 changelog/2026-08-11-keep-a-passing-test-run-quiet.md: the two parse-failure tests stub console.error and assert it was called, plus restoreMocks in vitest.config.ts, so a green run prints no stack traces.
 changelog/2026-08-12-auto-move-cards-completed-from-a-dataview-or-tasks-query.md: issue #16 — auto-move becomes an invariant enforced on every parse and on closed board files (modify + startup), so a card ticked in a query moves whether or not the board is open.
 changelog/2026-08-14-credit-the-fork-owner-in-the-plugin-manifest.md: manifest author/authorUrl/description credit j0rd1smit's fork so it is findable in Obsidian's installed-plugin list; id and name unchanged.
+changelog/2026-08-14-say-in-the-readme-that-this-is-a-fork.md: README gains a short "This fork" section — ownership, the two added features, and the BRAT install line — above upstream's README.
