@@ -264,6 +264,179 @@ describe('autoMoveDoneItem', () => {
         'write docs',
       ]);
     });
+
+    describe('routing the new occurrence to its own lane', () => {
+      const routed = { ...enabled, recurringEnabled: true, recurringLaneName: 'Recurring' };
+
+      const fourLaneBoard = () =>
+        makeBoard([
+          makeLane('Todo', [makeItem('write tests'), makeItem('write docs')]),
+          makeLane('Doing', [makeItem('build the thing')]),
+          makeLane('Done', [makeItem('older finished thing', 'x')], {
+            shouldMarkItemsComplete: true,
+          }),
+          makeLane('Recurring', [makeItem('take out the bins')]),
+        ]);
+
+      it('sends the new occurrence to the recurring lane', () => {
+        const next = autoMoveDoneItem(fourLaneBoard(), [0, 0], recurrence(), 1, routed);
+
+        expect(boardShape(next)).toEqual({
+          Todo: ['write docs'],
+          Doing: ['build the thing'],
+          Done: ['older finished thing', 'water plants 🔁 every week 📅 2026-08-07 ✅ 2026-08-07'],
+          Recurring: ['take out the bins', 'water plants 🔁 every week 📅 2026-08-14'],
+        });
+      });
+
+      it('routes the new occurrence with the completed card move off', () => {
+        const next = autoMoveDoneItem(fourLaneBoard(), [0, 0], recurrence(), 1, {
+          ...routed,
+          enabled: false,
+        });
+
+        expect(boardShape(next)).toEqual({
+          Todo: ['water plants 🔁 every week 📅 2026-08-07 ✅ 2026-08-07', 'write docs'],
+          Doing: ['build the thing'],
+          Done: ['older finished thing'],
+          Recurring: ['take out the bins', 'water plants 🔁 every week 📅 2026-08-14'],
+        });
+      });
+
+      it('handles the completed occurrence coming first', () => {
+        const next = autoMoveDoneItem(fourLaneBoard(), [0, 0], recurrence().reverse(), 0, routed);
+
+        expect(boardShape(next).Recurring).toEqual([
+          'take out the bins',
+          'water plants 🔁 every week 📅 2026-08-14',
+        ]);
+      });
+
+      it('prepends when the board prepends new cards', () => {
+        const next = autoMoveDoneItem(fourLaneBoard(), [0, 0], recurrence(), 1, {
+          ...routed,
+          insertionMethod: 'prepend',
+        });
+
+        expect(boardShape(next).Recurring).toEqual([
+          'water plants 🔁 every week 📅 2026-08-14',
+          'take out the bins',
+        ]);
+      });
+
+      it('leaves the new occurrence behind when no lane matches the name', () => {
+        const next = autoMoveDoneItem(threeLaneBoard(), [0, 0], recurrence(), 1, routed);
+
+        expect(boardShape(next).Todo).toEqual([
+          'water plants 🔁 every week 📅 2026-08-14',
+          'write docs',
+        ]);
+      });
+
+      it('leaves it alone when the card already sits in the recurring lane', () => {
+        const next = autoMoveDoneItem(fourLaneBoard(), [3, 0], recurrence(), 1, routed);
+
+        expect(boardShape(next)).toEqual({
+          Todo: ['write tests', 'write docs'],
+          Doing: ['build the thing'],
+          Done: ['older finished thing', 'water plants 🔁 every week 📅 2026-08-07 ✅ 2026-08-07'],
+          Recurring: ['water plants 🔁 every week 📅 2026-08-14'],
+        });
+      });
+
+      it('does nothing for a card that did not split', () => {
+        const next = autoMoveDoneItem(
+          fourLaneBoard(),
+          [0, 0],
+          [makeItem('write tests', 'x')],
+          0,
+          routed
+        );
+
+        expect(boardShape(next).Recurring).toEqual(['take out the bins']);
+        expect(boardShape(next).Done).toEqual(['older finished thing', 'write tests']);
+      });
+
+      it('does not route anything when the card was just unchecked', () => {
+        const next = autoMoveDoneItem(
+          fourLaneBoard(),
+          [2, 0],
+          [makeItem('older finished thing', ' ')],
+          0,
+          routed
+        );
+
+        expect(boardShape(next)).toEqual({
+          Todo: ['write tests', 'write docs'],
+          Doing: ['build the thing'],
+          Done: ['older finished thing'],
+          Recurring: ['take out the bins'],
+        });
+      });
+
+      it('handles a recurring lane that sits before the source lane', () => {
+        const board = makeBoard([
+          makeLane('Recurring', [makeItem('take out the bins')]),
+          makeLane('Todo', [makeItem('write tests'), makeItem('write docs')]),
+          makeLane('Done', [makeItem('older finished thing', 'x')]),
+        ]);
+
+        const next = autoMoveDoneItem(board, [1, 0], recurrence(), 1, routed);
+
+        expect(boardShape(next)).toEqual({
+          Recurring: ['take out the bins', 'water plants 🔁 every week 📅 2026-08-14'],
+          Todo: ['write docs'],
+          Done: ['older finished thing', 'water plants 🔁 every week 📅 2026-08-07 ✅ 2026-08-07'],
+        });
+      });
+
+      it('puts both cards in one lane when both settings name it', () => {
+        const next = autoMoveDoneItem(fourLaneBoard(), [0, 0], recurrence(), 1, {
+          ...routed,
+          recurringLaneName: DEFAULT_DONE_LANE_NAME,
+        });
+
+        expect(boardShape(next)).toEqual({
+          Todo: ['write docs'],
+          Doing: ['build the thing'],
+          Done: [
+            'older finished thing',
+            'water plants 🔁 every week 📅 2026-08-07 ✅ 2026-08-07',
+            'water plants 🔁 every week 📅 2026-08-14',
+          ],
+          Recurring: ['take out the bins'],
+        });
+      });
+
+      it('clears the sort flag on the recurring lane', () => {
+        const board = makeBoard([
+          makeLane('Todo', [makeItem('write tests')]),
+          makeLane('Done', [makeItem('older finished thing', 'x')]),
+          makeLane('Recurring', [makeItem('take out the bins')], { sorted: LaneSort.TitleAsc }),
+        ]);
+
+        const next = autoMoveDoneItem(board, [0, 0], recurrence(), 1, routed);
+
+        expect(next.children[2].data.sorted).toBeUndefined();
+        expect(boardShape(next).Recurring).toEqual([
+          'take out the bins',
+          'water plants 🔁 every week 📅 2026-08-14',
+        ]);
+      });
+
+      it('leaves the board it was given untouched', () => {
+        const board = fourLaneBoard();
+
+        autoMoveDoneItem(board, [0, 0], recurrence(), 1, routed);
+
+        expect(boardShape(board)).toEqual({
+          Todo: ['write tests', 'write docs'],
+          Doing: ['build the thing'],
+          Done: ['older finished thing'],
+          Recurring: ['take out the bins'],
+        });
+      });
+    });
   });
 
   it('clears the sort flag on the done lane so the card stays put', () => {

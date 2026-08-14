@@ -3,7 +3,7 @@ import { resolve } from 'path';
 import { toggleItemCheckbox } from 'src/helpers/completeItem';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { findItemPath, loadBoard } from './helpers/harness';
+import { Harness, findItemPath, loadBoard } from './helpers/harness';
 import { stubApp, tasksSettings } from './setup';
 
 /**
@@ -49,10 +49,22 @@ function fakeTasksPlugin() {
 function board({
   autoMove = true,
   doneLaneName,
-}: { autoMove?: boolean; doneLaneName?: string } = {}) {
+  moveRecurring = false,
+  recurringLaneName,
+  recurringLane,
+}: {
+  autoMove?: boolean;
+  doneLaneName?: string;
+  moveRecurring?: boolean;
+  recurringLaneName?: string;
+  /** Title of an extra lane appended to the board, when the test needs one */
+  recurringLane?: string;
+} = {}) {
   const settings: Record<string, any> = { 'kanban-plugin': 'board' };
   if (autoMove) settings['auto-move-done-to-lane'] = true;
   if (doneLaneName) settings['done-lane-name'] = doneLaneName;
+  if (moveRecurring) settings['move-recurring-to-lane'] = true;
+  if (recurringLaneName) settings['recurring-lane-name'] = recurringLaneName;
 
   return [
     '---',
@@ -73,6 +85,9 @@ function board({
     '',
     '- [x] Older finished thing ✅ 2026-08-01',
     '',
+    ...(recurringLane
+      ? ['', `## ${recurringLane}`, '', '- [ ] Take out the bins 📅 2026-08-09', '']
+      : []),
     '',
     '%% kanban:settings',
     '```',
@@ -80,6 +95,27 @@ function board({
     '```',
     '%%',
   ].join('\n');
+}
+
+/** Click the checkbox of the card whose title starts with `title`. */
+function toggle(harness: Harness, title: string) {
+  const path = findItemPath(harness.board(), title);
+
+  toggleItemCheckbox(
+    harness.stateManager,
+    harness.boardModifiers,
+    path,
+    harness.board().children[path[0]].children[path[1]]
+  );
+}
+
+/** Card titles per lane, keyed by lane title. */
+function byLane(harness: Harness): Record<string, string[]> {
+  return Object.fromEntries(
+    harness
+      .board()
+      .children.map((lane) => [lane.data.title, lane.children.map((i) => i.data.titleRaw)])
+  );
 }
 
 let restoreApp: () => void = () => {};
@@ -309,6 +345,151 @@ describe('completing a card, end to end', () => {
   });
 });
 
+describe('where the next occurrence of a recurring task lands', () => {
+  const NEXT = 'Water the plants 🔁 every week 📅 2026-08-14';
+  const COMPLETED = `Water the plants 🔁 every week 📅 2026-08-07 ✅ ${TODAY}`;
+
+  it('leaves it in place by default, even when a matching list exists', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board({ recurringLane: 'Recurring' }));
+
+    toggle(harness, 'Water the plants');
+
+    expect(harness.errors()).toEqual([]);
+    expect(byLane(harness)).toEqual({
+      Todo: ['Write the smoke test', NEXT],
+      Done: ['Older finished thing ✅ 2026-08-01', COMPLETED],
+      Recurring: ['Take out the bins 📅 2026-08-09'],
+    });
+  });
+
+  it('moves it to the recurring list when the setting is on', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board({ moveRecurring: true, recurringLane: 'Recurring' }));
+
+    toggle(harness, 'Water the plants');
+
+    expect(harness.errors()).toEqual([]);
+    expect(byLane(harness)).toEqual({
+      Todo: ['Write the smoke test'],
+      Done: ['Older finished thing ✅ 2026-08-01', COMPLETED],
+      Recurring: ['Take out the bins 📅 2026-08-09', NEXT],
+    });
+
+    const md = harness.markdown();
+    expect(md).toMatch(
+      /## Recurring\n\n- \[ \] Take out the bins 📅 2026-08-09\n- \[ \] Water the plants/
+    );
+    expect(md).toContain(`- [x] ${COMPLETED}`);
+    expect(md).not.toMatch(/## Todo\n\n- \[ \] Write the smoke test\n- \[ \] Water/);
+  });
+
+  it('works with the completed-card move turned off', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(
+      board({ autoMove: false, moveRecurring: true, recurringLane: 'Recurring' })
+    );
+
+    toggle(harness, 'Water the plants');
+
+    // the completed occurrence stays put, only the new one is routed
+    expect(byLane(harness)).toEqual({
+      Todo: ['Write the smoke test', COMPLETED],
+      Done: ['Older finished thing ✅ 2026-08-01'],
+      Recurring: ['Take out the bins 📅 2026-08-09', NEXT],
+    });
+  });
+
+  it('leaves it in place when no list matches the name', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board({ moveRecurring: true }));
+
+    toggle(harness, 'Water the plants');
+
+    expect(byLane(harness)).toEqual({
+      Todo: ['Write the smoke test', NEXT],
+      Done: ['Older finished thing ✅ 2026-08-01', COMPLETED],
+    });
+  });
+
+  it('honours a per-board recurring list name', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(
+      board({ moveRecurring: true, recurringLaneName: 'Herhalend', recurringLane: 'Herhalend' })
+    );
+
+    toggle(harness, 'Water the plants');
+
+    expect(byLane(harness)).toEqual({
+      Todo: ['Write the smoke test'],
+      Done: ['Older finished thing ✅ 2026-08-01', COMPLETED],
+      Herhalend: ['Take out the bins 📅 2026-08-09', NEXT],
+    });
+  });
+
+  it('leaves a card that already lives in the recurring list alone', async () => {
+    withTasksPlugin();
+    const md = board({ moveRecurring: true, recurringLane: 'Recurring' }).replace(
+      '- [ ] Take out the bins 📅 2026-08-09',
+      '- [ ] Take out the bins 🔁 every day 📅 2026-08-09'
+    );
+    const harness = await loadBoard(md);
+
+    toggle(harness, 'Take out the bins');
+
+    expect(byLane(harness)).toEqual({
+      Todo: ['Write the smoke test', 'Water the plants 🔁 every week 📅 2026-08-07'],
+      Done: [
+        'Older finished thing ✅ 2026-08-01',
+        `Take out the bins 🔁 every day 📅 2026-08-09 ✅ ${TODAY}`,
+      ],
+      Recurring: ['Take out the bins 🔁 every day 📅 2026-08-10'],
+    });
+  });
+
+  it('does nothing to a card that is not recurring', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board({ moveRecurring: true, recurringLane: 'Recurring' }));
+
+    toggle(harness, 'Write the smoke test');
+
+    expect(byLane(harness)).toEqual({
+      Todo: ['Water the plants 🔁 every week 📅 2026-08-07'],
+      Done: ['Older finished thing ✅ 2026-08-01', `Write the smoke test ✅ ${TODAY}`],
+      Recurring: ['Take out the bins 📅 2026-08-09'],
+    });
+  });
+
+  it('does nothing when a card is unchecked', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(board({ moveRecurring: true, recurringLane: 'Recurring' }));
+
+    toggle(harness, 'Older finished thing');
+
+    expect(byLane(harness)).toEqual({
+      Todo: ['Write the smoke test', 'Water the plants 🔁 every week 📅 2026-08-07'],
+      Done: ['Older finished thing'],
+      Recurring: ['Take out the bins 📅 2026-08-09'],
+    });
+  });
+
+  it('lets a board override the global setting', async () => {
+    withTasksPlugin();
+    // on globally, off for this board
+    const md = board({ recurringLane: 'Recurring' }).replace(
+      '"auto-move-done-to-lane":true}',
+      '"auto-move-done-to-lane":true,"move-recurring-to-lane":false}'
+    );
+    const harness = await loadBoard(md, { 'move-recurring-to-lane': true });
+
+    expect(harness.stateManager.getSetting('move-recurring-to-lane')).toBe(false);
+
+    toggle(harness, 'Water the plants');
+
+    expect(byLane(harness).Todo).toEqual(['Write the smoke test', NEXT]);
+  });
+});
+
 describe('a checkbox ticked outside the board', () => {
   /**
    * What a Dataview or Tasks query writes into the file: the checkbox flips and
@@ -449,6 +630,61 @@ describe('the example board in the demo vault', () => {
     );
     expect(done.children.at(-1).data.titleRaw).toBe(
       `Water the plants 🔁 every week 📅 2026-08-07 ✅ ${TODAY}`
+    );
+  });
+});
+
+describe('the recurring board in the demo vault', () => {
+  const examplePath = resolve(__dirname, '../demo_vault/Recurring cards.md');
+
+  it('parses, with both settings on', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(readFileSync(examplePath, 'utf8'));
+
+    expect(harness.errors()).toEqual([]);
+    expect(harness.board().children.map((l) => l.data.title)).toEqual([
+      'Todo',
+      'Doing',
+      'Recurring',
+      'Done',
+    ]);
+    expect(harness.stateManager.getSetting('auto-move-done-to-lane')).toBe(true);
+    expect(harness.stateManager.getSetting('move-recurring-to-lane')).toBe(true);
+  });
+
+  it('sends a ticked recurring card two ways, the way the board promises', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(readFileSync(examplePath, 'utf8'));
+
+    toggle(harness, 'Water the plants');
+
+    expect(harness.errors()).toEqual([]);
+    expect(byLane(harness)).toEqual({
+      Todo: [
+        'Stand-up notes 🔁 every day 📅 2026-08-07 ⏫',
+        'Tick me — not recurring, so I just go to Done',
+      ],
+      Doing: ['Drag me into Done — the drop path is not covered by this setting'],
+      Recurring: [
+        'Pay the rent 🔁 every month 📅 2026-09-01',
+        'Water the plants 🔁 every week 📅 2026-08-14',
+      ],
+      Done: [
+        'Something finished earlier ✅ 2026-08-01',
+        `Water the plants 🔁 every week 📅 2026-08-07 ✅ ${TODAY}`,
+      ],
+    });
+  });
+
+  it('leaves a non-recurring card to the plain auto-move', async () => {
+    withTasksPlugin();
+    const harness = await loadBoard(readFileSync(examplePath, 'utf8'));
+
+    toggle(harness, 'Tick me');
+
+    expect(byLane(harness).Recurring).toEqual(['Pay the rent 🔁 every month 📅 2026-09-01']);
+    expect(byLane(harness).Done.at(-1)).toBe(
+      `Tick me — not recurring, so I just go to Done ✅ ${TODAY}`
     );
   });
 });

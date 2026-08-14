@@ -1,7 +1,7 @@
 # Completing a card (checkbox, auto-move)
 
 `src/helpers/completeItem.ts` owns what happens when a card is completed, from a click or from outside the board.
-Fork-specific behavior, see the changelog entry for auto-move-to-done.
+Fork-specific behavior, see the changelog entries for auto-move-to-done and for the recurring list.
 
 - `toggleItemCheckbox(stateManager, boardModifiers, path, item)` is the whole handler;
   `ItemCheckbox` (used by both the board and the table view) just calls it.
@@ -9,9 +9,12 @@ Fork-specific behavior, see the changelog entry for auto-move-to-done.
   where `thisIndex` is the **completed** occurrence — a recurring task yields two strings, the other being the newly scheduled one.
   Without Tasks it flips `checked` / `checkChar` itself.
 - Both paths end in `boardModifiers.completeItem(path, items, completedIndex)`, which resolves the settings and calls `autoMoveDoneItem`.
-- `autoMoveDoneItem(board, path, items, completedIndex, options)` is pure and does the replace-then-move:
-  `insertEntity(removeEntity(...))` in the source lane with the items that stay, then `insertEntity` of the completed one into the done lane, then `$unset` `sorted` there.
-  It short-circuits to a plain in-place replace when the feature is off, no lane matches, the card is already in the done lane, or the toggle did not leave the card complete.
+- `autoMoveDoneItem(board, path, items, completedIndex, options)` is pure. It picks a destination lane per item, then
+  replaces the source position with whatever is not travelling (`insertEntity(removeEntity(...))`) and inserts each traveller into its lane via `insertIntoLane`, which appends or prepends per `new-card-insertion-method` and `$unset`s that lane's `sorted`.
+  With nothing to move it is a plain in-place replace — the case when the settings are off, no lane matches, the card is already in the destination lane, or the toggle did not leave the card complete.
+- Two independent destinations, each with its own on/off setting:
+  the **completed** occurrence goes to the done lane, and **every other item** the toggle produced — only ever the next occurrence of a recurring task — goes to the recurring lane.
+  Either can be on without the other. `insertIntoLane` re-reads the lane per call, so both landing in the same lane still appends in order (completed first).
 
 ## The invariant, and completing a card from outside the board
 
@@ -51,12 +54,22 @@ It is enforced in three places, the checkbox handler above being the first:
   See [drag-and-drop.md](drag-and-drop.md).
 - It deliberately does **not** run `maybeCompleteForMove` the way the drop handler does: the checkbox already decided the card's completion state, and re-deriving it from the destination lane's `shouldMarkItemsComplete` would undo the user's click.
 
+## The recurring lane
+
+`move-recurring-to-lane` sends the occurrence the Tasks plugin schedules to `recurring-lane-name` instead of leaving it where the completed card was.
+
+- Only the checkbox path implements it, because it is the only place a card is known to be a *new* occurrence.
+  A recurrence created by a Dataview / Tasks query is written into the file by the Tasks plugin, and by the time the board parses it, it is an ordinary incomplete card — indistinguishable from one that was always there.
+  So neither `autoMoveCompletedItems` nor `sweepCompletedCards` routes it, and neither has a reason to: the invariant they enforce is about *complete* cards.
+- The drop path (`maybeCompleteForMove`, see [drag-and-drop.md](drag-and-drop.md)) also splits a recurring card, and leaves the new occurrence at the drag position via `moveEntity`'s replacement callback. It is not covered — doing so means changing upstream drop handling in `DragDropApp.tsx` and `moveCardToBoard.ts`.
+
 ## Settings
 
-`auto-move-done-to-lane` (bool, default off) and `done-lane-name` (string, default `Done`, matched trimmed + case-insensitively against `lane.data.title`).
-Neither is in `compiledSettings` or `shouldRefreshBoard` — they don't affect parsing, and reading them through `getSetting` keeps a per-board change effective immediately.
-Insert position inside the done lane reuses `new-card-insertion-method`.
-One pair of settings covers both entry points; there is no separate toggle for the external one.
+`auto-move-done-to-lane` (bool, default off) and `done-lane-name` (string, default `Done`), plus `move-recurring-to-lane` (bool, default off) and `recurring-lane-name` (string, default `Recurring`).
+Lane names are matched trimmed + case-insensitively against `lane.data.title`, by `matchesLaneName`.
+None of the four is in `compiledSettings` or `shouldRefreshBoard` — they don't affect parsing, and reading them through `getSetting` keeps a per-board change effective immediately.
+Insert position inside either destination lane reuses `new-card-insertion-method`.
+One set of settings covers both entry points; there is no separate toggle for the external one.
 
 ## Gotchas
 
@@ -65,3 +78,5 @@ One pair of settings covers both entry points; there is no separate toggle for t
 - The file sweep only moves a card whose line the serializer would have written (`- [x] ` at the start of a line, continuation lines indented). Anything it does not recognise is left alone rather than guessed at.
 - A board open in a **markdown** view has no `StateManager`, so the sweep treats it as closed and may rewrite the file under the editor. Obsidian merges the change back, but a save from that editor can still win and undo the move.
 - `tests/helpers/harness.ts` `externalChange(md)` is the test stand-in for Obsidian re-reading the file; it goes through the real `registerView` -> `newBoard`.
+- `move-recurring-to-lane` does nothing without the Tasks plugin: no plugin, no split, so `items` is one card and there is no new occurrence to route. Same for an *uncheck*, which never splits — `autoMoveDoneItem` only treats the other items as a recurrence when the toggle left the card complete.
+- `autoMoveCompletedItems` calls `autoMoveDoneItem` with a single item, so the recurring branch is dead on that path by construction, whatever the settings say.
