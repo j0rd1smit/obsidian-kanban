@@ -30,7 +30,7 @@ import {
   TagSortSettingTemplate,
 } from './components/types';
 import { getParentWindow } from './dnd/util/getWindow';
-import { DEFAULT_DONE_LANE_NAME } from './helpers/completeItem';
+import { DEFAULT_DONE_LANE_NAME, DEFAULT_RECURRING_LANE_NAME } from './helpers/completeItem';
 import { t } from './lang/helpers';
 import KanbanPlugin from './main';
 import { frontmatterKey } from './parsers/common';
@@ -73,12 +73,14 @@ export interface KanbanSettings {
   'max-archive-size'?: number;
   'metadata-keys'?: DataKey[];
   'move-dates'?: boolean;
+  'move-recurring-to-lane'?: boolean;
   'move-tags'?: boolean;
   'move-task-metadata'?: boolean;
   'new-card-insertion-method'?: 'prepend' | 'prepend-compact' | 'append';
   'new-line-trigger'?: 'enter' | 'shift-enter';
   'new-note-folder'?: string;
   'new-note-template'?: string;
+  'recurring-lane-name'?: string;
   'show-add-list'?: boolean;
   'show-archive-all'?: boolean;
   'show-board-settings'?: boolean;
@@ -123,12 +125,14 @@ export const settingKeyLookup: Set<keyof KanbanSettings> = new Set([
   'max-archive-size',
   'metadata-keys',
   'move-dates',
+  'move-recurring-to-lane',
   'move-tags',
   'move-task-metadata',
   'new-card-insertion-method',
   'new-line-trigger',
   'new-note-folder',
   'new-note-template',
+  'recurring-lane-name',
   'show-add-list',
   'show-archive-all',
   'show-board-settings',
@@ -255,9 +259,7 @@ export class SettingsManager {
     new Setting(contentEl)
       .setName(t('Move completed cards to a list'))
       .setDesc(
-        t(
-          "When toggled, checking a card's checkbox moves that card to the list named below. Recurring tasks leave their next occurrence behind."
-        )
+        t("When toggled, checking a card's checkbox moves that card to the list named below.")
       )
       .then((setting) => {
         let toggleComponent: ToggleComponent;
@@ -322,6 +324,80 @@ export class SettingsManager {
 
           this.applySettingsUpdate({
             $unset: ['done-lane-name'],
+          });
+        });
+      });
+
+    new Setting(contentEl)
+      .setName(t('Move new recurring cards to a list'))
+      .setDesc(
+        t(
+          "When toggled, completing a recurring task puts its next occurrence in the list named below, instead of leaving it in the completed card's place. Requires the Tasks plugin."
+        )
+      )
+      .then((setting) => {
+        let toggleComponent: ToggleComponent;
+
+        setting
+          .addToggle((toggle) => {
+            toggleComponent = toggle;
+
+            const [value, globalValue] = this.getSetting('move-recurring-to-lane', local);
+
+            if (value !== undefined) {
+              toggle.setValue(value as boolean);
+            } else if (globalValue !== undefined) {
+              toggle.setValue(globalValue as boolean);
+            }
+
+            toggle.onChange((newValue) => {
+              this.applySettingsUpdate({
+                'move-recurring-to-lane': {
+                  $set: newValue,
+                },
+              });
+            });
+          })
+          .addExtraButton((b) => {
+            b.setIcon('lucide-rotate-ccw')
+              .setTooltip(t('Reset to default'))
+              .onClick(() => {
+                const [, globalValue] = this.getSetting('move-recurring-to-lane', local);
+                toggleComponent.setValue(!!globalValue);
+
+                this.applySettingsUpdate({
+                  $unset: ['move-recurring-to-lane'],
+                });
+              });
+          });
+      });
+
+    new Setting(contentEl)
+      .setName(t('Recurring card list'))
+      .setDesc(
+        t(
+          'The name of the list the next occurrence of a recurring task is moved to. Matched case-insensitively; cards stay put when no list matches.'
+        )
+      )
+      .addText((text) => {
+        const [value, globalValue] = this.getSetting('recurring-lane-name', local);
+
+        text.inputEl.placeholder = `${globalValue || DEFAULT_RECURRING_LANE_NAME} (default)`;
+        text.inputEl.value = (value as string) || '';
+
+        text.onChange((val) => {
+          if (val.trim()) {
+            this.applySettingsUpdate({
+              'recurring-lane-name': {
+                $set: val.trim(),
+              },
+            });
+
+            return;
+          }
+
+          this.applySettingsUpdate({
+            $unset: ['recurring-lane-name'],
           });
         });
       });

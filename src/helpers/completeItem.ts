@@ -9,14 +9,19 @@ import { getTaskStatusDone, toggleTask } from 'src/parsers/helpers/inlineMetadat
 import type { BoardModifiers } from './boardModifiers';
 
 export const DEFAULT_DONE_LANE_NAME = 'Done';
+export const DEFAULT_RECURRING_LANE_NAME = 'Recurring';
 
 export interface AutoMoveDoneOptions {
   /** `auto-move-done-to-lane` */
   enabled: boolean;
   /** `done-lane-name`, matched against lane titles case-insensitively */
   laneName: string;
-  /** `new-card-insertion-method`, decides top vs bottom of the done lane */
+  /** `new-card-insertion-method`, decides top vs bottom of the destination lane */
   insertionMethod?: 'prepend' | 'prepend-compact' | 'append';
+  /** `move-recurring-to-lane` */
+  recurringEnabled?: boolean;
+  /** `recurring-lane-name`, matched against lane titles case-insensitively */
+  recurringLaneName?: string;
 }
 
 /**
@@ -60,7 +65,7 @@ export function toggleItemCheckbox(
 }
 
 /**
- * The three settings the auto-move reads, resolved through `getSetting`.
+ * The settings the auto-move reads, resolved through `getSetting`.
  *
  * `settings` is the per-board block to resolve against. Pass it when the board
  * those settings came from is not (yet) the state manager's current state — a
@@ -74,6 +79,9 @@ export function autoMoveDoneOptions(
     enabled: !!stateManager.getSetting('auto-move-done-to-lane', settings),
     laneName: stateManager.getSetting('done-lane-name', settings) || DEFAULT_DONE_LANE_NAME,
     insertionMethod: stateManager.getSetting('new-card-insertion-method', settings),
+    recurringEnabled: !!stateManager.getSetting('move-recurring-to-lane', settings),
+    recurringLaneName:
+      stateManager.getSetting('recurring-lane-name', settings) || DEFAULT_RECURRING_LANE_NAME,
   };
 }
 
@@ -103,13 +111,45 @@ function replaceInPlace(board: Board, path: Path, items: Item[]): Board {
 }
 
 /**
- * Replace the item at `path` with `items`, moving `items[completedIndex]` to the
- * done lane when it came back complete and auto-move is on.
+ * Put `items` at the top or bottom of a lane, per `new-card-insertion-method`,
+ * and drop that lane's sort so a deliberate placement isn't undone.
+ *
+ * The lane is re-read from `board` on every call: an earlier insert into the
+ * same lane has already shifted where the end is.
+ */
+function insertIntoLane(
+  board: Board,
+  laneIndex: number,
+  items: Item[],
+  insertionMethod: AutoMoveDoneOptions['insertionMethod']
+): Board {
+  const lane = board.children[laneIndex];
+  const insertIndex = (insertionMethod || 'append') === 'append' ? lane.children.length : 0;
+
+  const next = insertEntity(board, [laneIndex, insertIndex], items) as Board;
+
+  // A manual placement shouldn't be immediately re-sorted, same as a drop
+  if (lane.data.sorted !== undefined) {
+    return updateEntity(next, [laneIndex], { data: { $unset: ['sorted'] } }) as Board;
+  }
+
+  return next;
+}
+
+/**
+ * Replace the item at `path` with `items`, sending each one to the lane it
+ * belongs in: `items[completedIndex]` to the done lane when it came back
+ * complete and auto-move is on, and any other item — the next occurrence of a
+ * recurring task — to the recurring lane when that setting is on.
  *
  * `items` is what a checkbox toggle produced: normally a single item, but the
  * Tasks plugin turns a recurring task into two — the completed occurrence
- * (`completedIndex`) and the freshly scheduled one. Only the completed
- * occurrence travels; the new occurrence stays where the user left it.
+ * (`completedIndex`) and the freshly scheduled one. Anything that isn't sent
+ * somewhere stays where the user left it, so with both settings off this is a
+ * plain in-place replace.
+ *
+ * The two settings are independent: routing the next occurrence works whether
+ * or not completed cards are being moved.
  *
  * Note this deliberately does *not* run `maybeCompleteForMove` the way the drop
  * handler does. The checkbox already decided the card's completion state, and
@@ -122,39 +162,46 @@ export function autoMoveDoneItem(
   completedIndex: number,
   options: AutoMoveDoneOptions
 ): Board {
-  const completedItem = items[completedIndex];
-
-  if (!options.enabled || !completedItem || !isItemComplete(completedItem)) {
-    return replaceInPlace(board, path, items);
-  }
-
   const sourceLaneIndex = path[0];
-  const doneLaneIndex = findLaneIndexByTitle(board, options.laneName);
+  const completedItem = items[completedIndex];
+  const completed = !!completedItem && isItemComplete(completedItem);
 
-  // No such lane, or the card is already sitting in it
-  if (doneLaneIndex === -1 || doneLaneIndex === sourceLaneIndex) {
-    return replaceInPlace(board, path, items);
+  // A lane the card isn't already in, or -1 for "leave it alone"
+  const destinationLane = (enabled: boolean, laneName: string) => {
+    if (!enabled) return -1;
+    const laneIndex = findLaneIndexByTitle(board, laneName);
+    return laneIndex === sourceLaneIndex ? -1 : laneIndex;
+  };
+
+  const doneLaneIndex = destinationLane(options.enabled && completed, options.laneName);
+
+  // Only a completion produces a next occurrence; an uncheck yields one item
+  const recurringItems = completed ? items.filter((_, i) => i !== completedIndex) : [];
+  const recurringLaneIndex = destinationLane(
+    !!options.recurringEnabled && recurringItems.length > 0,
+    options.recurringLaneName || DEFAULT_RECURRING_LANE_NAME
+  );
+
+  const movesCompleted = doneLaneIndex !== -1;
+  const movesRecurring = recurringLaneIndex !== -1;
+
+  if (!movesCompleted && !movesRecurring) return replaceInPlace(board, path, items);
+
+  const staying = items.filter((_, i) =>
+    i === completedIndex ? !movesCompleted : !movesRecurring
+  );
+
+  let next = replaceInPlace(board, path, staying);
+
+  if (movesCompleted) {
+    next = insertIntoLane(next, doneLaneIndex, [completedItem], options.insertionMethod);
   }
 
-  const staying = items.filter((_, i) => i !== completedIndex);
-  const withoutCompleted = replaceInPlace(board, path, staying);
-
-  const doneLane = withoutCompleted.children[doneLaneIndex];
-  const insertIndex =
-    (options.insertionMethod || 'append') === 'append' ? doneLane.children.length : 0;
-
-  const moved = insertEntity(
-    withoutCompleted,
-    [doneLaneIndex, insertIndex],
-    [completedItem]
-  ) as Board;
-
-  // A manual placement shouldn't be immediately re-sorted, same as a drop
-  if (doneLane.data.sorted !== undefined) {
-    return updateEntity(moved, [doneLaneIndex], { data: { $unset: ['sorted'] } }) as Board;
+  if (movesRecurring) {
+    next = insertIntoLane(next, recurringLaneIndex, recurringItems, options.insertionMethod);
   }
 
-  return moved;
+  return next;
 }
 
 /** Path of the card with this id, or undefined. */
