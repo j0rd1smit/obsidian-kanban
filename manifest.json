@@ -3,9 +3,9 @@
 	"name": "Kanban (custom)",
 	"version": "2.2.0",
 	"minAppVersion": "1.0.0",
-	"description": "Create markdown-backed Kanban boards in Obsidian.",
-	"author": "mgmeyers",
-	"authorUrl": "https://github.com/mgmeyers/obsidian-kanban",
+	"description": "Create markdown-backed Kanban boards in Obsidian. j0rd1smit's personal fork of mgmeyers/obsidian-kanban.",
+	"author": "j0rd1smit (fork of mgmeyers' Kanban)",
+	"authorUrl": "https://github.com/j0rd1smit/obsidian-kanban",
 	"helpUrl": "https://publish.obsidian.md/kanban/Obsidian+Kanban+Plugin",
 	"isDesktopOnly": false
 }
