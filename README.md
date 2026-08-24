@@ -1,5 +1,27 @@
 # Obsidian Kanban Plugin
 
+## This fork
+
+A personal fork of [mgmeyers/obsidian-kanban](https://github.com/mgmeyers/obsidian-kanban)
+by [j0rd1smit](https://github.com/j0rd1smit), built for my own vault. It ships under its own
+plugin id (`kanban-custom`, shown as "Kanban (custom)"), so it can be installed next to the
+upstream plugin. Everything below is upstream's README and still applies.
+
+On top of upstream:
+
+- **Auto-move completed cards to a done list** — off by default. Ticking a card's checkbox
+  moves it to the list named in the settings (`Done` by default), set globally or per board.
+  It also runs on boards that are closed, so a card ticked from a `dataview` or `tasks` query
+  ends up in the right list too.
+- **Move a card to another board** — a "Move to other board" item in the card menu that asks
+  for a board and then one of its lists. The destination board does not have to be open, which
+  makes it usable on mobile.
+
+Install with [BRAT](https://github.com/TfTHacker/obsidian42-brat): add
+`j0rd1smit/obsidian-kanban` as a beta plugin.
+
+---
+
 **The Kanban plugin is looking for new maintainers.** Interested? [Read more here.](https://github.com/mgmeyers/obsidian-kanban/blob/main/MAINTAINERS.md)
 
 ---
